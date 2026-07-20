@@ -1,0 +1,803 @@
+/* gui.css -- data-entry GUI. Laptop-first: dense tables, real forms.
+   Modernised for v2: pill nav, cards, modals, clickable rows, inline edit. */
+
+:root {
+  --gui-bg: #f6f8fa;
+  --gui-panel: #ffffff;
+  --gui-fg: #1a1d21;
+  --gui-muted: #667085;
+  --gui-line: #e0e4ea;
+  --gui-accent: #1264d8;
+  --gui-accent-soft: #e8f0fd;
+  --gui-danger: #b42318;
+  --gui-danger-soft: #fdf3f2;
+  --gui-ok: #067647;
+  --gui-busy: #8a6d00;
+  --gui-warn-soft: #fff6e0;
+  --gui-th-bg: #fafbfc;
+  --gui-edit-bg: #fffdf2;
+  --gui-cell-border: #b9c0ca;
+  --gui-radius: 10px;
+  --gui-shadow: 0 1px 2px rgba(16, 24, 40, 0.06),
+                0 1px 3px rgba(16, 24, 40, 0.10);
+}
+
+/* Dark mode -- toggled from the navbar, persisted in localStorage. */
+
+[data-theme="dark"] {
+  --gui-bg: #14171c;
+  --gui-panel: #1e232b;
+  --gui-fg: #e6e9ee;
+  --gui-muted: #98a2b3;
+  --gui-line: #333b47;
+  --gui-accent: #5c9bf5;
+  --gui-accent-soft: #1d2c44;
+  --gui-danger: #f28b82;
+  --gui-danger-soft: #3a2422;
+  --gui-ok: #5bbf8a;
+  --gui-busy: #d8b74a;
+  --gui-warn-soft: #3a3320;
+  --gui-th-bg: #232935;
+  --gui-edit-bg: #2b2f26;
+  --gui-cell-border: #4a5462;
+  --gui-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+                0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .gui-demo {
+  background: #3a3320;
+  border-bottom-color: #5a5030;
+  color: #d8c878;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--gui-bg);
+  color: var(--gui-fg);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* header + nav */
+
+.gui-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--gui-panel);
+  border-bottom: 1px solid var(--gui-line);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: var(--gui-shadow);
+}
+
+.gui-header h1 {
+  font-size: 16px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.gui-nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.gui-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--gui-muted);
+  cursor: pointer;
+}
+
+.gui-tab:hover { color: var(--gui-fg); background: var(--gui-bg); }
+
+.gui-tab.is-active {
+  color: var(--gui-accent);
+  font-weight: 600;
+  background: var(--gui-accent-soft);
+}
+
+.gui-theme-btn { margin-left: auto; }
+.gui-api-btn { white-space: nowrap; }
+
+/* status */
+
+.gui-status {
+  min-height: 22px;
+  padding: 3px 20px;
+  font-size: 13px;
+  color: var(--gui-muted);
+}
+
+.gui-status-ok { color: var(--gui-ok); }
+.gui-status-err { color: var(--gui-danger); font-weight: 600; }
+.gui-status-busy { color: var(--gui-busy); }
+
+/* layout */
+
+.gui-main { padding: 4px 20px 60px; }
+
+.gui-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 10px;
+}
+
+.gui-page-head h2, .gui-page-head h3 { margin: 0; font-size: 16px; }
+
+.gui-subpanel {
+  margin-top: 22px;
+  padding-top: 10px;
+  border-top: 2px solid var(--gui-line);
+}
+
+.gui-card {
+  background: var(--gui-panel);
+  border: 1px solid var(--gui-line);
+  border-radius: var(--gui-radius);
+  box-shadow: var(--gui-shadow);
+  padding: 14px 16px;
+  margin: 10px 0;
+}
+
+/* tables */
+
+.gui-table-wrap {
+  overflow-x: auto;
+  background: var(--gui-panel);
+  border: 1px solid var(--gui-line);
+  border-radius: var(--gui-radius);
+  box-shadow: var(--gui-shadow);
+}
+
+.gui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.gui-table th, .gui-table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gui-line);
+  white-space: nowrap;
+}
+
+.gui-table tbody tr:last-child td { border-bottom: none; }
+
+.gui-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gui-muted);
+  background: var(--gui-th-bg);
+}
+
+/* clickable rows */
+
+.gui-row-click { cursor: pointer; }
+.gui-row-click:hover td { background: var(--gui-accent-soft); }
+.gui-row-click:focus { outline: 2px solid var(--gui-accent); }
+
+.gui-row-editing td { background: var(--gui-edit-bg); }
+
+.gui-row-editbar td {
+  background: var(--gui-edit-bg);
+  border-top: none;
+  padding-top: 0;
+}
+
+.gui-actions-inline { margin-top: 0; padding: 4px 0 8px; }
+
+.gui-row-actions { text-align: right; }
+.gui-row-actions .gui-btn { margin-left: 6px; }
+
+.gui-empty {
+  color: var(--gui-muted);
+  font-style: italic;
+  padding: 12px 14px;
+  margin: 0;
+}
+
+/* forms */
+
+.gui-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 16px;
+}
+
+.gui-field { display: flex; flex-direction: column; }
+.gui-field-full { grid-column: 1 / -1; }
+
+.gui-label {
+  font-size: 12px;
+  color: var(--gui-muted);
+  margin-bottom: 3px;
+}
+
+.gui-input {
+  font: inherit;
+  padding: 7px 9px;
+  border: 1px solid var(--gui-line);
+  border-radius: 8px;
+  background: var(--gui-panel);
+  color: inherit;
+}
+
+.gui-input:focus {
+  outline: 2px solid var(--gui-accent);
+  outline-offset: -1px;
+}
+
+textarea.gui-input { min-height: 58px; resize: vertical; }
+
+/* Table-editing inputs read as SPREADSHEET CELLS: square, flush, compact --
+   no rounded chrome eating table real estate. */
+
+.gui-cell {
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 4px;
+  border: 1px solid var(--gui-cell-border);
+  border-radius: 0;
+  background: var(--gui-panel);
+  color: inherit;
+  width: 100%;
+  min-width: 4em;
+  height: 26px;
+  box-sizing: border-box;
+}
+
+textarea.gui-cell { height: auto; }
+
+.gui-cell:focus {
+  outline: 2px solid var(--gui-accent);
+  outline-offset: -2px;
+}
+
+select.gui-cell {
+  appearance: auto;
+  padding: 1px 2px;
+}
+
+/* Tighten the cells' padding while a row is editing so inputs sit flush,
+   like a selected spreadsheet row. */
+
+.gui-row-editing td,
+.gui-grid td { padding: 2px 3px; }
+
+.gui-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* buttons */
+
+.gui-btn {
+  font: inherit;
+  padding: 7px 14px;
+  border: 1px solid var(--gui-line);
+  border-radius: 8px;
+  background: var(--gui-panel);
+  color: inherit;
+  cursor: pointer;
+}
+
+.gui-btn:hover { background: var(--gui-bg); }
+.gui-btn:disabled { opacity: 0.5; cursor: default; }
+
+.gui-btn-sm { padding: 3px 10px; font-size: 13px; }
+
+.gui-btn-primary {
+  background: var(--gui-accent);
+  border-color: var(--gui-accent);
+  color: #fff;
+}
+
+.gui-btn-primary:hover { filter: brightness(0.94); background: var(--gui-accent); }
+
+.gui-btn-danger { color: var(--gui-danger); border-color: #f0c8c4; }
+.gui-btn-danger:hover { background: var(--gui-danger-soft); }
+
+.gui-btn-menu {
+  width: 100%;
+  text-align: center;
+  padding: 10px 14px;
+}
+
+.gui-menu-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+}
+
+/* modal */
+
+.gui-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.45);
+
+  /* Above Leaflet: its panes/controls run to z-index ~1000, so the map
+     options popup must sit well past that. */
+
+  z-index: 5000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px 16px;
+  overflow-y: auto;
+}
+
+.gui-modal {
+  background: var(--gui-panel);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.3);
+  max-width: 560px;
+  width: 100%;
+  animation: gui-modal-in 120ms ease-out;
+}
+
+/* Wide modals take 90% of the page width (same font size). */
+
+.gui-modal-wide { width: 90%; max-width: 90%; }
+
+@keyframes gui-modal-in {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.gui-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 0;
+}
+
+.gui-modal-title { margin: 0; font-size: 16px; }
+
+.gui-modal-x {
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--gui-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.gui-modal-x:hover { background: var(--gui-bg); color: var(--gui-fg); }
+
+.gui-modal-body { padding: 12px 18px 18px; }
+
+.gui-modal-sub {
+  margin: 0 0 12px;
+  color: var(--gui-muted);
+  font-size: 13px;
+}
+
+body.gui-modal-open { overflow: hidden; }
+
+/* schedule week bar + day cards */
+
+.gui-weekbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gui-weekbar .gui-week-label {
+  font-weight: 600;
+  min-width: 220px;
+  text-align: center;
+}
+
+.gui-day-card { padding: 12px 16px 14px; }
+
+.gui-day-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.gui-day-title { margin: 0; font-size: 15px; }
+
+.gui-day-badge {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.gui-day-badge-field { background: #e6f4ea; color: var(--gui-ok); }
+.gui-day-badge-weather { background: var(--gui-warn-soft); color: #8a6d00; }
+
+.gui-day-head .gui-actions { margin: 0 0 0 auto; }
+
+.gui-fieldtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--gui-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.gui-fieldtoggle input { accent-color: var(--gui-accent); }
+
+.gui-day-times {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  margin: 4px 0 10px;
+}
+
+.gui-day-times .k { color: var(--gui-muted); margin-right: 4px; }
+
+.gui-day-patch {
+  border-left: 3px solid var(--gui-accent-soft);
+  padding: 4px 0 4px 12px;
+  margin: 6px 0;
+  font-size: 14px;
+}
+
+.gui-day-patch .gui-day-patch-name { font-weight: 600; }
+
+.gui-day-patch .t { color: var(--gui-muted); font-size: 13px; }
+
+.gui-day-notes {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--gui-muted);
+  font-style: italic;
+}
+
+.gui-day-forecast { margin-top: 6px; font-size: 13px; }
+
+/* edit-day modal layout */
+
+.gui-editday-times {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.gui-editday-patch {
+  display: grid;
+  grid-template-columns: 1fr 2fr 2fr;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--gui-line);
+}
+
+@media (max-width: 900px) {
+  .gui-editday-times { grid-template-columns: repeat(3, 1fr); }
+  .gui-editday-patch { grid-template-columns: 1fr; }
+}
+
+/* schedule day content -- mirrors the field app's schedule CSS
+   (field_map_app.css .schedule-table family) so a day reads identically. */
+
+.gui-day-body { font-size: 14px; }
+.gui-day-body p { margin: 8px 0 4px; }
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.schedule-table th,
+.schedule-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--gui-line);
+  vertical-align: top;
+}
+
+.schedule-table th {
+  color: var(--gui-muted);
+  font-weight: 600;
+}
+
+.schedule-table .sched-patch {
+  white-space: nowrap;
+  font-weight: 600;
+  border-right: 1px solid var(--gui-line);
+}
+
+.schedule-notes {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.morning-table th,
+.morning-table td { text-align: center; }
+
+.weather-summary { font-weight: 600; }
+
+.gui-day-body details { margin: 6px 0; }
+
+.gui-day-body summary {
+  cursor: pointer;
+  color: var(--gui-accent);
+  font-size: 13px;
+}
+
+/* nest info: mini map + photo (mirrors the app's nest-info screen) */
+
+.gui-nestinfo-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.gui-nestinfo-map {
+  flex: 1 1 320px;
+  min-width: 260px;
+  height: 260px;
+  border-radius: 8px;
+  border: 1px solid var(--gui-line);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.gui-nestinfo-photo {
+  flex: 1 1 320px;
+  min-width: 260px;
+}
+
+.gui-nestinfo-photo-img {
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 8px;
+  border: 1px solid var(--gui-line);
+  display: block;
+}
+
+/* map */
+
+.gui-map-shell { position: relative; margin-top: 10px; }
+
+.gui-map {
+  height: calc(100vh - 175px);
+  min-height: 420px;
+  border-radius: var(--gui-radius);
+  border: 1px solid var(--gui-line);
+  box-shadow: var(--gui-shadow);
+}
+
+.gui-map-cog {
+  position: absolute;
+
+  /* Below Leaflet's own layers control, which owns the top-right corner. */
+
+  top: 64px;
+  right: 12px;
+  z-index: 1000;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--gui-line);
+  background: var(--gui-panel);
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: var(--gui-shadow);
+}
+
+.gui-map-cog:hover { background: var(--gui-bg); }
+
+.gui-map-legend {
+  position: absolute;
+  bottom: 22px;
+  left: 12px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--gui-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.gui-map-legend .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.gui-map-legend .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  display: inline-block;
+}
+
+.gui-map-legend .legend-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.gui-map-patchlabel span {
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 1px 3px #000;
+  white-space: nowrap;
+}
+
+.gui-map-toggles { display: flex; flex-direction: column; gap: 8px; }
+
+.gui-map-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.gui-map-toggles input { accent-color: var(--gui-accent); }
+
+.gui-map-popup { font-size: 13px; }
+.gui-map-popup h4 { margin: 0 0 4px; font-size: 14px; }
+.gui-map-popup .kv { margin: 1px 0; }
+.gui-map-popup .kv .k { color: var(--gui-muted); margin-right: 4px; }
+
+/* token gate */
+
+.gui-gate {
+  max-width: 420px;
+  margin: 40px auto;
+  padding: 20px;
+  background: var(--gui-panel);
+  border: 1px solid var(--gui-line);
+  border-radius: var(--gui-radius);
+  box-shadow: var(--gui-shadow);
+}
+
+.gui-gate h2 { margin: 0 0 6px; font-size: 16px; }
+.gui-gate p { margin: 0 0 12px; color: var(--gui-muted); font-size: 13px; }
+.gui-gate .gui-input { width: 100%; margin-bottom: 10px; }
+
+/* demo banner (only with ?demo=1) */
+
+.gui-demo {
+  background: var(--gui-warn-soft);
+  border-bottom: 1px solid #f0e0a0;
+  color: #6b5900;
+  font-size: 13px;
+  padding: 6px 20px;
+}
+
+.gui-rowcount { color: var(--gui-muted); font-size: 13px; align-self: center; }
+
+
+/* map top bar */
+
+.gui-map-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.gui-map-bar select { max-width: 320px; }
+
+.gui-map-popup-photo {
+  display: block;
+  max-width: 220px;
+  max-height: 160px;
+  margin-top: 6px;
+  border-radius: 6px;
+}
+
+.gui-point-facts {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.gui-point-facts li { margin: 3px 0; }
+
+/* theme switch */
+
+.gui-theme-switch {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--gui-muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.gui-theme-switch input { display: none; }
+
+.gui-switch-track {
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--gui-line);
+  position: relative;
+  transition: background 120ms ease;
+}
+
+.gui-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gui-panel);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: left 120ms ease;
+}
+
+.gui-theme-switch input:checked + .gui-switch-track {
+  background: var(--gui-accent);
+}
+
+.gui-theme-switch input:checked + .gui-switch-track .gui-switch-thumb {
+  left: 20px;
+}
+
+/* photo viewer (90% of the page in the constraining direction) */
+
+.gui-photo-modal {
+  width: auto;
+  max-width: 92vw;
+  background: transparent;
+  box-shadow: none;
+}
+
+.gui-photo-modal .gui-modal-head { display: none; }
+.gui-photo-modal .gui-modal-body { padding: 0; }
+
+.gui-photo-full {
+  display: block;
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  cursor: zoom-out;
+}
+
+.gui-zoomable { cursor: zoom-in; }
+
+/* Opaque page surfaces: nothing from a hidden tab may show through. */
+
+html { background: var(--gui-bg); }
+
+.gui-page {
+  background: var(--gui-bg);
+  position: relative;
+  z-index: 1;
+}
+
+.gui-page[style*="display: none"] { visibility: hidden; }

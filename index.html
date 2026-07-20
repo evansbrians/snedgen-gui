@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snedgen nest study</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- Apply the saved theme BEFORE first paint so the page never flashes
+       the other mode. Dark is the default. -->
+  <script>
+    try {
+      document.documentElement.dataset.theme =
+        localStorage.getItem("guiTheme") || "dark";
+    } catch (e) {}
+  </script>
+
+  <!-- Leaflet (map page), vendored so the map works without a CDN, plus the
+       field app's own Leaflet styling so the map looks identical. -->
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <link rel="stylesheet" href="src/css/map_styles.css">
+
+  <link rel="stylesheet" href="src/css/gui.css">
+</head>
+<body>
+
+  <header class="gui-header">
+    <h1>Snedgen nest study</h1>
+    <nav id="guiNav" class="gui-nav"></nav>
+    <!-- Light / dark: an explicit labeled switch, not a mystery icon. -->
+    <label class="gui-theme-switch" title="Light / dark mode">
+      <span>Light</span>
+      <input id="guiThemeToggle" type="checkbox">
+      <span class="gui-switch-track"><span class="gui-switch-thumb"></span></span>
+      <span>Dark</span>
+    </label>
+    <!-- Always reachable: a stored-but-stale token must never lock the
+         page (the gate below only shows when NO token is stored). -->
+    <button id="guiApiSettings" class="gui-btn gui-btn-sm gui-api-btn"
+            title="API token and server">⚙ API</button>
+  </header>
+
+  <div id="guiDemoBanner" class="gui-demo" style="display:none">
+    Demo mode — sample data held in memory. Nothing is saved; reload resets it.
+  </div>
+
+  <div id="guiStatus" class="gui-status" role="status" aria-live="polite"></div>
+
+  <!-- Shown only until a token is stored; the API is token-gated even
+       same-origin. -->
+  <div id="guiTokenGate" class="gui-gate" style="display:none">
+    <h2>API token</h2>
+    <p>Paste your token to start. It is stored on this laptop only.</p>
+    <input id="guiTokenInput" class="gui-input" type="password"
+           placeholder="API token" autocomplete="off">
+    <button id="guiTokenSave" class="gui-btn gui-btn-primary">Save</button>
+  </div>
+
+  <main id="guiPages" class="gui-main"></main>
+
+  <!-- Patch boundary polygons (window.fieldPatches) and the field app's
+       inlined marker icons (window.fieldIcons), both copied from
+       nest_app_api so the map renders exactly like the app. -->
+  <script src="src/data/field_patches.js"></script>
+  <script src="src/data/field_icons.js"></script>
+  <script src="src/data/field_paths.js"></script>
+
+  <script src="src/js/api.js"></script>
+  <script src="src/js/ui.js"></script>
+
+  <!-- Demo fixtures. Active ONLY with ?demo=1 in the URL; every normal load
+       talks to the live API. -->
+  <script src="src/js/mock.js"></script>
+
+  <!-- app.js FIRST: it defines window.GuiPages, which every page calls at
+       load time. Its own boot is deferred to DOMContentLoaded. -->
+  <script src="src/js/app.js"></script>
+
+  <!-- One line per page, in tab order (registration order IS tab order):
+       Schedule, Nests, GPS points, Visits, Point counts, Coverboards,
+       Cameras, Map. Pages self-register; app.js never imports them. -->
+  <script src="src/js/pages/schedule.js"></script>
+  <script src="src/js/pages/nests.js"></script>
+  <script src="src/js/pages/gps_points.js"></script>
+  <script src="src/js/pages/visits.js"></script>
+  <script src="src/js/pages/point_counts.js"></script>
+  <script src="src/js/pages/coverboards.js"></script>
+  <script src="src/js/pages/cameras.js"></script>
+  <script src="src/js/pages/map.js"></script>
+
+</body>
+</html>
