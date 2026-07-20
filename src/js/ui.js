@@ -487,11 +487,32 @@
       data.push({});
     }
 
-    function cellInput(row, c) {
+    // Focus the input at (row r, column ci) in the CURRENT tbody -- render()
+    // rebuilds it, so navigation always queries fresh DOM.
+
+    function focusCell(r, ci) {
+      var body = t.tBodies[0];
+
+      if (!body || r < 0 || r >= body.rows.length) return;
+      if (ci < 0 || ci >= cols.length) return;
+
+      var cell = body.rows[r].cells[ci];
+      var input = cell && cell.querySelector("input, select");
+
+      if (!input) return;
+      input.focus();
+      if (input.select) {
+        try { input.select(); } catch (e) {}
+      }
+    }
+
+    function cellInput(row, c, r, ci) {
       var input = makeInput(c, row[c.key]);
 
       input.className = "gui-cell";
       if (c.width) input.style.width = c.width;
+      input.dataset.r = r;
+      input.dataset.c = ci;
 
       input.addEventListener("change", function () {
         var v = readInput(input, c);
@@ -509,6 +530,51 @@
         if (last && !isBlank(last)) render();
         if (changed) changed(rowsOut());
       });
+
+      // Spreadsheet keys: Enter commits + moves DOWN, arrows move between
+      // cells (Tab already moves right natively). Selects keep native
+      // Up/Down (that's how their value changes) but Left/Right navigate;
+      // text cells navigate horizontally only from the caret's edge, so
+      // arrowing within a half-typed species code still works.
+
+      input.addEventListener("keydown", function (e) {
+        var rr = Number(input.dataset.r);
+        var cc = Number(input.dataset.c);
+        var isSelect = input.tagName === "SELECT";
+        var isText = input.tagName === "INPUT" && input.type === "text";
+
+        function go(nr, nc) {
+          e.preventDefault();
+
+          // Commit first: the change handler may append the blank row (or
+          // rebuild the tbody), and the target cell must exist by the time
+          // focus moves.
+
+          input.dispatchEvent(new Event("change"));
+          focusCell(nr, nc);
+        }
+
+        if (e.key === "Enter") {
+          go(rr + 1, cc);
+        } else if (e.key === "ArrowDown" && !isSelect) {
+          go(rr + 1, cc);
+        } else if (e.key === "ArrowUp" && !isSelect) {
+          go(rr - 1, cc);
+        } else if (e.key === "ArrowRight") {
+          if (isSelect) {
+            go(rr, cc + 1);
+          } else if (!isText ||
+                     input.selectionEnd === input.value.length) {
+            go(rr, cc + 1);
+          }
+        } else if (e.key === "ArrowLeft") {
+          if (isSelect) {
+            go(rr, cc - 1);
+          } else if (!isText || input.selectionStart === 0) {
+            go(rr, cc - 1);
+          }
+        }
+      });
       return input;
     }
 
@@ -522,9 +588,9 @@
 
         if (i === data.length - 1) tr.className = "gui-grid-new";
 
-        cols.forEach(function (c) {
+        cols.forEach(function (c, ci) {
           var td = el("td");
-          td.appendChild(cellInput(row, c));
+          td.appendChild(cellInput(row, c, i, ci));
           tr.appendChild(td);
         });
 
@@ -534,6 +600,11 @@
           var d = el("button", "gui-btn gui-btn-sm gui-btn-danger", "×");
 
           d.title = "Remove row";
+
+          // Out of the tab order so Tab flows cell -> cell, not through
+          // every remove button.
+
+          d.tabIndex = -1;
           d.addEventListener("click", function () {
             data.splice(i, 1);
             render();
