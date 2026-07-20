@@ -50,7 +50,15 @@
     document.body.appendChild(backdrop);
     document.body.classList.add("gui-modal-open");
 
-    function close() {
+    function close(force) {
+      // A guard (unsaved work) can veto every ordinary close -- Esc, the X,
+      // the backdrop. Pass force=true to close regardless (e.g. after the
+      // guard's own confirm, or after a successful save/delete).
+
+      if (!force && opts.beforeClose && opts.beforeClose(handle) === false) {
+        return;
+      }
+
       if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
       document.removeEventListener("keydown", onKey);
 
@@ -71,7 +79,10 @@
       if (e.key === "Escape" && !opts.locked && isTop()) close();
     }
 
-    x.addEventListener("click", close);
+    // NOT `close` directly: the click event would land in close(force) and
+    // read as force=true, skipping any beforeClose guard.
+
+    x.addEventListener("click", function () { close(); });
     backdrop.addEventListener("click", function (e) {
       if (e.target === backdrop && !opts.locked) close();
     });
@@ -506,6 +517,61 @@
       }
     }
 
+    // A freshly-typed row inherits opts.inherit columns (e.g. interval)
+    // from the row above, exactly as those values repeat down her sheet.
+
+    function applyInherit(row) {
+      if (!opts.inherit || isBlank(row)) return;
+
+      var i = data.indexOf(row);
+
+      if (i <= 0) return;
+      opts.inherit.forEach(function (k) {
+        if ((row[k] === undefined || row[k] === null || row[k] === "") &&
+            data[i - 1][k] !== undefined && data[i - 1][k] !== null &&
+            data[i - 1][k] !== "") {
+          row[k] = data[i - 1][k];
+        }
+      });
+    }
+
+    // Paste a block copied from a real spreadsheet: TSV rows fill from the
+    // focused cell rightward and downward, growing the grid as needed.
+
+    function pasteBlock(text, startRow, startCol) {
+      var lines = String(text).replace(/\r/g, "").split("\n")
+        .filter(function (l, i, arr) {
+          return !(l === "" && i === arr.length - 1);
+        });
+
+      lines.forEach(function (line, dr) {
+        var cells = line.split("\t");
+
+        while (data.length <= startRow + dr) data.push({});
+
+        var row = data[startRow + dr];
+
+        cells.forEach(function (cell, dc) {
+          var col = cols[startCol + dc];
+
+          if (!col) return;
+
+          var v = cell.trim();
+
+          if (v === "") return;
+          if (col.type === "number") {
+            v = isNaN(Number(v)) ? null : Number(v);
+          } else if (col.uppercase) {
+            v = v.toUpperCase();
+          }
+          if (v !== null) row[col.key] = v;
+        });
+      });
+      render();
+      if (changed) changed(rowsOut());
+      focusCell(startRow, startCol);
+    }
+
     function cellInput(row, c, r, ci) {
       var input = makeInput(c, row[c.key]);
 
@@ -524,12 +590,22 @@
           input.value = v;
         }
         row[c.key] = v;
+        applyInherit(row);
 
         var last = data[data.length - 1];
 
         if (last && !isBlank(last)) render();
         if (changed) changed(rowsOut());
       });
+
+      // Spreadsheet feel: focusing a cell selects its content, so typing
+      // overwrites; Escape restores what was there before the edit.
+
+      if (input.tagName === "INPUT") {
+        input.addEventListener("focus", function () {
+          try { input.select(); } catch (e) {}
+        });
+      }
 
       // Spreadsheet keys: Enter commits + moves DOWN, arrows move between
       // cells (Tab already moves right natively). Selects keep native
@@ -552,6 +628,20 @@
 
           input.dispatchEvent(new Event("change"));
           focusCell(nr, nc);
+        }
+
+        if (e.key === "Escape") {
+          // Restore the cell only -- do NOT let Esc bubble on to close the
+          // whole modal mid-edit.
+
+          e.preventDefault();
+          e.stopPropagation();
+
+          var prev = row[c.key];
+
+          input.value = (prev === undefined || prev === null)
+            ? "" : String(prev);
+          return;
         }
 
         if (e.key === "Enter") {
@@ -632,6 +722,23 @@
     t.appendChild(thead);
     render();
     wrap.appendChild(t);
+
+    // Block paste, table-wide: a TSV block copied from a real spreadsheet
+    // fills from whichever cell is focused (dropdown cells included).
+
+    t.addEventListener("paste", function (e) {
+      var a = document.activeElement;
+
+      if (!a || a.dataset === undefined || a.dataset.r === undefined) return;
+
+      var text = (e.clipboardData || window.clipboardData)
+        .getData("text/plain");
+
+      if (text && (text.indexOf("\t") > -1 || text.indexOf("\n") > -1)) {
+        e.preventDefault();
+        pasteBlock(text, Number(a.dataset.r), Number(a.dataset.c));
+      }
+    });
 
     return {
       el: wrap,

@@ -149,10 +149,35 @@
 
   function openCount(row) {
     var isNew = !row;
+    var dirty = false;
+
+    // Closing with unsaved counts warns first, like a spreadsheet would.
+
     var m = GuiUI.modal(
       isNew ? "New point count" : "Point count — " + countTitle(row),
-      { wide: true }
+      {
+        wide: true,
+        beforeClose: function (handle) {
+          if (!dirty) return true;
+
+          GuiUI.confirm(
+            "The counts have unsaved changes. Close without saving?"
+          ).then(function (yes) {
+            if (yes) handle.close(true);
+          });
+          return false;
+        }
+      }
     );
+
+    // Cmd/Ctrl-S saves the counts instead of the web page.
+
+    m.el.addEventListener("keydown", function (e) {
+      if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "s") {
+        e.preventDefault();
+        saveGridNow();
+      }
+    });
 
     // -- stop-level data ----------------------------------------------------
 
@@ -288,9 +313,12 @@
           var rows = toGrid(r);
 
           gridHost.innerHTML = "";
-          grid = GuiUI.grid(gridCols(state.lk), rows);
+          grid = GuiUI.grid(gridCols(state.lk), rows,
+            { inherit: ["interval"] });
+          grid.onChange(function () { dirty = true; });
           gridHost.appendChild(grid.el);
           rowCount.textContent = rows.length + " rows";
+          dirty = false;
         }).catch(function (e) {
           GuiUI.status("Could not load counts: " + e.message, "err");
           if (window.console) console.error(e);
@@ -302,7 +330,7 @@
       loadGrid();
     }
 
-    saveGridBtn.addEventListener("click", function () {
+    function saveGridNow() {
       if (!grid || !row) {
         GuiUI.status("Save the stop-level data first.", "err");
         return;
@@ -328,12 +356,15 @@
         "/point_counts/" + row.point_count_id + "/intervals", body
       ).then(function () {
         GuiUI.status("Counts saved.", "ok");
+        dirty = false;
         return loadGrid();
       }).catch(function (e) {
         GuiUI.status("Save failed: " + e.message, "err");
         if (window.console) console.error(e);
       });
-    });
+    }
+
+    saveGridBtn.addEventListener("click", saveGridNow);
 
     if (isNew) {
       gridHost.appendChild(GuiUI.el("p", "gui-empty",
