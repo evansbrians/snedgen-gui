@@ -35,10 +35,12 @@
     return Number(n.max_eggs) > 0 || Number(n.max_young) > 0;
   }
 
-  // Available candidates: flagged artificial_candidate, not an NQ nest,
-  // and not yet CONVERTED -- once NQ104 exists, N104 is spent. Same rule
-  // as the map's Artificial candidates view. Conversion is checked
-  // against ALL nests, not just the selected patch.
+  // Available candidates: flagged artificial_candidate, CONCLUDED (a
+  // fate of Success / Failure / Unknown -- a current nest cannot be a
+  // candidate yet), not an NQ nest, and not yet CONVERTED -- once NQ104
+  // exists, N104 is spent. Same rule as the map's Artificial candidates
+  // view. Conversion is checked against ALL nests, not just the
+  // selected patch.
 
   function availableCandidates(rows) {
     var nqNums = {};
@@ -51,6 +53,7 @@
 
     return rows.filter(function (n) {
       if (Number(n.artificial_candidate) !== 1) return false;
+      if (isCurrent(n)) return false;
       if (isArtificial(n)) return false;
 
       var m = /^N[A-Z]*?(\d+)/.exec(String(n.nest_id || ""));

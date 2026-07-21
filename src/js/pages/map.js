@@ -69,6 +69,31 @@
 
   // ---- data ----------------------------------------------------------------
 
+  // Nest fates, keyed by id. /map_points does not carry nest_fate, and
+  // the Artificial-candidates view needs it: a candidate must be
+  // CONCLUDED (Success / Failure / Unknown) -- a current nest cannot be
+  // offered as a candidate yet.
+
+  var CONCLUDED = ["Success", "Failure", "Unknown"];
+
+  function loadFates() {
+    return GuiApi.get("/nests").then(function (rows) {
+      state.fates = {};
+      (rows || []).forEach(function (n) {
+        state.fates[String(n.nest_id)] = n.nest_fate || null;
+      });
+      redraw();
+    }).catch(function () {
+      state.fates = {};
+    });
+  }
+
+  function isConcluded(name) {
+    var fate = (state.fates || {})[String(name)];
+
+    return !!fate && CONCLUDED.indexOf(String(fate)) !== -1;
+  }
+
   function loadData() {
     GuiUI.status("Loading map…", "busy");
 
@@ -266,6 +291,7 @@
         var nm = String(row.name || "");
 
         if (Number(row.artificial_candidate) !== 1) return;
+        if (!isConcluded(nm)) return;
         if (/^NQ/.test(nm)) return;
         if (/artificial/.test(String(row.icon || ""))) return;
 
@@ -870,6 +896,7 @@
 
       loadData();
       loadTracks();
+      loadFates();
       applyFocus();
     },
 
