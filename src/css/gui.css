@@ -371,6 +371,52 @@ input.gui-cell[type="number"] {
   appearance: textfield;
 }
 
+/* Inline switch in a filter bar (e.g. Nests' Current toggle). */
+
+.gui-switch-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.gui-switch-inline input { width: 16px; height: 16px; }
+
+/* Summary tab. */
+
+.gui-summary-list {
+  margin: 4px 0;
+  padding-left: 22px;
+  line-height: 2;
+}
+
+.gui-summary-list strong { font-size: 16px; }
+
+/* Species info tab (the app's species-table, restyled to the GUI). */
+
+.gui-species-panel h3 { margin-top: 0; }
+.gui-species-panel h4 { margin: 16px 0 4px; }
+.gui-species-panel p { margin: 6px 0; }
+
+.species-table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.species-table th, .species-table td {
+  text-align: left;
+  padding: 5px 14px 5px 0;
+  border-bottom: 1px solid var(--gui-line);
+  font-size: 14px;
+}
+
+.species-table th {
+  color: var(--gui-muted);
+  font-weight: 600;
+  padding-right: 24px;
+}
+
 /* The mini map's jump button + interactive mini maps. */
 
 .gui-nestinfo-map { position: relative; }

@@ -40,7 +40,9 @@
     rows: [],
     options: {
       patch: "__all__",
-      today: true
+      today: true,
+      artOnly: false,
+      track: "__all__"
     }
   };
 
@@ -223,6 +225,14 @@
     state.rows.forEach(function (row) {
       if (!rowVisible(row)) return;
 
+      // "Artificial candidates" option: nests thin down to candidates
+      // only; the other classes stay put.
+
+      if (state.options.artOnly && row.class === "nest" &&
+          Number(row.artificial_candidate) !== 1) {
+        return;
+      }
+
       var icon = leafletIcon(row, zs);
       var marker = icon
         ? window.L.marker([row.lat, row.lng], {
@@ -338,6 +348,24 @@
     });
   }
 
+  // Track length in metres: the recorded length_m when the app stored
+  // one, otherwise summed segment lengths (flat-plane approximation).
+
+  var M_PER_DEG_LAT = 111320;
+
+  function trackLengthM(pts) {
+    var total = 0;
+
+    for (var i = 1; i < pts.length; i++) {
+      var kx = M_PER_DEG_LAT * Math.cos(pts[i][0] * Math.PI / 180);
+      var dx = (pts[i][1] - pts[i - 1][1]) * kx;
+      var dy = (pts[i][0] - pts[i - 1][0]) * M_PER_DEG_LAT;
+
+      total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+  }
+
   function drawTracks() {
     var group = state.overlays["Search tracks"];
 
@@ -351,6 +379,10 @@
       });
 
       if (pts.length < 2) return;
+      if (state.options.track !== "__all__" &&
+          t.track_id !== state.options.track) {
+        return;
+      }
       if (state.options.patch !== "__all__" &&
           t.patch_id !== state.options.patch &&
           !anyVertexInPatch([pts], state.options.patch)) {
@@ -363,10 +395,13 @@
         color: "#ff7f00"
       });
 
+      var meters = Number(t.length_m) || trackLengthM(pts);
+
       line.bindPopup(
         GuiUI.dash(t.name) +
         (t.activity ? " — " + t.activity : "") +
-        (t.created_at ? "<br>" + String(t.created_at).slice(0, 10) : "")
+        (t.created_at ? "<br>" + String(t.created_at).slice(0, 10) : "") +
+        "<br>Length: " + Math.round(meters) + " m"
       );
       group.addLayer(line);
     });
@@ -402,10 +437,23 @@
     host.appendChild(row);
   }
 
+  // A nest that IS the artificial nest now -- or has been used as one --
+  // reads under its NQ name (N066 -> NQ066). The artificial icons are the
+  // signal: v_map_point assigns them to current and former artificials.
+
+  function displayName(row) {
+    if (row.class === "nest" &&
+        /artificial/.test(String(row.icon || "")) &&
+        /^N\d+$/.test(String(row.name || ""))) {
+      return "NQ" + String(row.name).slice(1);
+    }
+    return row.name;
+  }
+
   function popupFor(row) {
     var box = GuiUI.el("div", "gui-map-popup");
 
-    box.appendChild(GuiUI.el("h4", null, GuiUI.dash(row.name)));
+    box.appendChild(GuiUI.el("h4", null, GuiUI.dash(displayName(row))));
 
     if (row.class === "nest") {
       kv(box, "Species", row.species);
@@ -505,6 +553,12 @@
       state.map.hasLayer(state.overlays["Search tracks"]),
       function (on) { setGroup("Search tracks", on); });
 
+    toggle(box, "Artificial candidates", !!state.options.artOnly,
+      function (on) {
+        state.options.artOnly = on;
+        redraw();
+      });
+
     toggle(box, "Show sampling points",
       state.map.hasLayer(state.overlays.Coverboards),
       function (on) {
@@ -525,6 +579,38 @@
       });
 
     m.body.appendChild(box);
+
+    // Subset the search tracks by name (shown when any tracks exist).
+
+    if ((state.tracks || []).length) {
+      var trow = GuiUI.el("div", "gui-field");
+      var tlab = GuiUI.el("label", "gui-label", "Search track");
+      var tsel = GuiUI.el("select", "gui-input");
+      var allo = GuiUI.el("option", null, "All tracks");
+
+      allo.value = "__all__";
+      tsel.appendChild(allo);
+      state.tracks.forEach(function (t) {
+        var o = GuiUI.el("option", null,
+          (t.name || t.track_id) +
+          (t.patch_id ? " (" + pretty(t.patch_id) + ")" : ""));
+
+        o.value = t.track_id;
+        tsel.appendChild(o);
+      });
+      tsel.value = state.options.track || "__all__";
+      tsel.addEventListener("change", function () {
+        state.options.track = tsel.value;
+
+        // Picking a specific track implies wanting to SEE it.
+
+        if (tsel.value !== "__all__") setGroup("Search tracks", true);
+        drawTracks();
+      });
+      trow.appendChild(tlab);
+      trow.appendChild(tsel);
+      m.body.appendChild(trow);
+    }
 
     var bar = GuiUI.el("div", "gui-actions");
     var refresh = GuiUI.el("button", "gui-btn", "Refresh data");

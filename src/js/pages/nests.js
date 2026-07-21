@@ -12,7 +12,18 @@
 "use strict";
 
 (function () {
-  var state = { nests: [], intervals: [], patch: "", q: "" };
+  var state = { nests: [], intervals: [], patch: "", q: "", current: false };
+
+  // "Current": fate is none of Unknown / Failure / Success.
+
+  var CONCLUDED = ["Unknown", "Failure", "Success"];
+
+  function isCurrent(n) {
+    var fate = n.nest_fate;
+
+    if (fate === null || fate === undefined || fate === "") return true;
+    return CONCLUDED.indexOf(String(fate)) === -1;
+  }
   var refs = {};
 
   // ---- data ----------------------------------------------------------------
@@ -166,9 +177,13 @@
   function visibleNests() {
     var q = state.q.toLowerCase();
 
-    if (!q) return state.nests;
     return state.nests.filter(function (n) {
-      return String(n.nest_id || "").toLowerCase().indexOf(q) !== -1;
+      if (state.current && !isCurrent(n)) return false;
+      if (q &&
+          String(n.nest_id || "").toLowerCase().indexOf(q) === -1) {
+        return false;
+      }
+      return true;
     });
   }
 
@@ -725,6 +740,27 @@
 
     bar.appendChild(field("Patch", patch, "nestsFilterPatch"));
     bar.appendChild(field("Nest id contains", search, "nestsFilterId"));
+
+    // Current-nests switch: hide concluded nests (fate Unknown / Failure
+    // / Success).
+
+    var curRow = GuiUI.el("div", "gui-field");
+    var curLab = GuiUI.el("label", "gui-label", "Current nests only");
+    var curWrap = GuiUI.el("label", "gui-switch-inline");
+    var cur = GuiUI.el("input");
+
+    cur.type = "checkbox";
+    cur.id = "nestsFilterCurrent";
+    curLab.setAttribute("for", "nestsFilterCurrent");
+    cur.addEventListener("change", function () {
+      state.current = cur.checked;
+      renderNests();
+    });
+    curWrap.appendChild(cur);
+    curWrap.appendChild(GuiUI.el("span", null, "Current"));
+    curRow.appendChild(curLab);
+    curRow.appendChild(curWrap);
+    bar.appendChild(curRow);
     host.appendChild(bar);
   }
 

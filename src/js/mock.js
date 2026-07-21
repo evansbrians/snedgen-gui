@@ -115,6 +115,7 @@
         location_description: "Rose thicket by trail",
         last_check: "2026-07-14",
         nest_fate: null, selfie_stick: 0, artificial_candidate: 1,
+        max_eggs: 3, max_young: 0,
         substrates: "Multiflora rose",
         gps_point_id: "pt-n060"
       },
@@ -125,7 +126,8 @@
         height_m: 1.5, camera_or_control: "Control",
         location_description: "Paired with N060",
         last_check: "2026-07-14",
-        nest_fate: "FLED", selfie_stick: 0, artificial_candidate: 0,
+        nest_fate: "Success", selfie_stick: 0, artificial_candidate: 0,
+        max_eggs: null, max_young: null,
         substrates: "Multiflora rose",
         gps_point_id: "pt-n060"
       },
@@ -137,6 +139,7 @@
         location_description: "Spicebush at creek bend",
         last_check: "2026-07-15",
         nest_fate: null, selfie_stick: 1, artificial_candidate: 0,
+        max_eggs: 0, max_young: 0,
         substrates: "Spicebush",
         gps_point_id: "pt-n061"
       }

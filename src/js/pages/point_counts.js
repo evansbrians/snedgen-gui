@@ -412,7 +412,8 @@
         );
       }).then(function () {
         dirty = false;
-        return loadCounts().then(loadGrids);
+        m.close(true);
+        return loadCounts();
       }).then(function () {
         GuiUI.status("Point count saved.", "ok");
       }).catch(function (e) {

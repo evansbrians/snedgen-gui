@@ -58,18 +58,58 @@
     return inside;
   }
 
+  // Metres from a point to a polygon edge (point-to-segment). Flat-plane
+  // approximation -- plenty at this scale.
+
+  var M_PER_DEG_LAT = 111320;
+
+  function segDistM(lat, lng, a, b) {
+    var kx = M_PER_DEG_LAT * Math.cos(lat * Math.PI / 180);
+    var px = (lng - a[1]) * kx;
+    var py = (lat - a[0]) * M_PER_DEG_LAT;
+    var vx = (b[1] - a[1]) * kx;
+    var vy = (b[0] - a[0]) * M_PER_DEG_LAT;
+    var len2 = vx * vx + vy * vy;
+    var t = len2
+      ? Math.max(0, Math.min(1, (px * vx + py * vy) / len2))
+      : 0;
+    var dx = px - t * vx;
+    var dy = py - t * vy;
+
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // Inside a polygon wins; otherwise the nearest boundary within 50 m
+  // claims the point (GPS drift puts real nests just outside their patch
+  // line -- N110, N114).
+
+  var NEAR_M = 50;
+
   function patchOf(lat, lng) {
     var patches = window.fieldPatches || {};
     var names = Object.keys(patches);
+    var best = null;
+    var bestD = Infinity;
 
     for (var i = 0; i < names.length; i++) {
       var rings = ringsOf(patches[names[i]]);
 
       for (var r = 0; r < rings.length; r++) {
-        if (inRing(lat, lng, rings[r])) return names[i];
+        var ring = rings[r];
+
+        if (inRing(lat, lng, ring)) return names[i];
+
+        for (var s = 0, e = ring.length - 1; s < ring.length; e = s++) {
+          var d = segDistM(lat, lng, ring[e], ring[s]);
+
+          if (d < bestD) {
+            bestD = d;
+            best = names[i];
+          }
+        }
       }
     }
-    return null;
+    return bestD <= NEAR_M ? best : null;
   }
 
   // ---- data ----------------------------------------------------------------

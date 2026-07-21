@@ -774,7 +774,12 @@
         }
 
         if (e.key === "Enter") {
-          go(rr + 1, cc);
+          // From the LAST column, Enter starts the next row at its first
+          // column -- finishing a line, spreadsheet-style. Elsewhere it
+          // moves straight down.
+
+          if (cc === cols.length - 1) go(rr + 1, 0);
+          else go(rr + 1, cc);
         } else if (e.key === "ArrowDown" && !isSelect) {
           go(rr + 1, cc);
         } else if (e.key === "ArrowUp" && !isSelect) {
