@@ -134,6 +134,115 @@
     }, Promise.resolve());
   }
 
+  // ---- weather-day shift ---------------------------------------------------
+  //
+  // The Field-day checkboxes are the source of truth. Each Mon-Sat date owns a
+  // canonical "plan" (the work for that field day). When a day is unchecked its
+  // plan bumps forward onto the next field-eligible date, spilling into Sunday;
+  // re-checking restores the original alignment (fully reversible, because the
+  // alignment is recomputed from the flags, never stored over). Only helper +
+  // weather and -- per spec -- the receiving date's own times stay pinned to the
+  // calendar date; everything else travels with the plan. Past dates render as
+  // stored (the server roll-forward freezes the as-lived record). This mirrors
+  // the verified reference in outputs/sched/assign.py.
+
+  var PLAN_FIELDS = [
+    "patch_count", "boards", "check_nests", "predator_cameras", "notes",
+    "search_patch_1", "tns_patch_1", "helper_patch_1",
+    "search_patch_2", "tns_patch_2", "helper_patch_2",
+    "search_patch_3", "tns_patch_3", "helper_patch_3",
+    "search_patch_4", "tns_patch_4", "helper_patch_4"
+  ];
+
+  var PINNED_FIELDS = [
+    "helper", "weather", "field", "arrive", "sunrise",
+    "departure_time", "scbi_departure_time", "point_count_time"
+  ];
+
+  function hasPlanRows(dateStr) {
+    return rowsFor(dateStr).length > 0;
+  }
+
+  function isCancelled(dateStr) {
+    var rs = rowsFor(dateStr);
+
+    return rs.length > 0 && !isFieldDay(rs);
+  }
+
+  // Compute { displayDate -> homeDate (whose plan shows there) | null (empty) }.
+  function computeAssignment() {
+    var today = iso(new Date());
+    var dates = [];
+    var i;
+
+    for (i = 0; i < 7; i++) dates.push(iso(addDays(state.weekStart, i)));
+
+    // Canonical plans: Mon-Sat dates that have stored rows, in order. A
+    // cancelled day still HOLDS its plan (field = FALSE) -- it just can't host.
+    var plans = [];
+
+    for (i = 0; i < 6; i++) {
+      if (hasPlanRows(dates[i])) plans.push(dates[i]);
+    }
+
+    // Past dates are frozen: they show their own plan and consume it. The rest
+    // place onto field-eligible dates from today forward.
+    var assign = {};
+    var remaining = [];
+
+    plans.forEach(function (hd) {
+      if (hd < today) assign[hd] = hd;
+      else remaining.push(hd);
+    });
+
+    var k = 0;
+
+    dates.forEach(function (d) {
+      if (d < today) {
+        if (!(d in assign)) assign[d] = null;
+        return;
+      }
+      if (isCancelled(d)) {
+        assign[d] = null;
+        return;
+      }
+      if (k < remaining.length) {
+        assign[d] = remaining[k];
+        k += 1;
+      } else {
+        assign[d] = null;
+      }
+    });
+    return assign;
+  }
+
+  // The rows shown on a display date: the assigned plan's rows, with the pinned
+  // fields overlaid from the display date's own row. __homeId / __pinnedId let
+  // the editor route each edit back to the right physical row.
+  function displayRowsFor(displayStr) {
+    var homeStr = state.assign ? state.assign[displayStr] : displayStr;
+
+    if (!homeStr) return [];
+
+    var planRows = rowsFor(homeStr);
+    var pinnedSrc = rowsFor(displayStr)[0] || null;
+    var dow = (new Date(displayStr + "T00:00:00").getDay() + 6) % 7;
+
+    return planRows.map(function (pr) {
+      var out = {};
+
+      Object.keys(pr).forEach(function (key) { out[key] = pr[key]; });
+      if (pinnedSrc) {
+        PINNED_FIELDS.forEach(function (key) { out[key] = pinnedSrc[key]; });
+      }
+      out.date = displayStr;
+      out.day = DAY_NAMES[dow].slice(0, 3);
+      out.__homeId = pr.schedule_day_id;
+      out.__pinnedId = pinnedSrc ? pinnedSrc.schedule_day_id : null;
+      return out;
+    });
+  }
+
   // ---- the app's day format (mirrors nestapi_schedule.js) ------------------
 
   function esc(s) {
@@ -432,21 +541,16 @@
     renderWeekBar();
     refs.list.innerHTML = "";
 
-    // Sunday hides while every Mon-Sat day is a field day (a day with no
-    // rows counts as checked -- that is the default state).
+    // Recompute the plan->date alignment from the current field flags, then
+    // render Mon-Sat always (the checkbox needs to be reachable) and Sunday only
+    // when a cancellation has pushed a plan onto it.
 
-    var allField = true;
-
-    for (var i = 0; i < 6; i++) {
-      if (!isFieldDay(rowsFor(iso(addDays(state.weekStart, i))))) {
-        allField = false;
-      }
-    }
+    state.assign = computeAssignment();
 
     for (var d = 0; d < 7; d++) {
-      if (d === 6 && allField) continue;
-
       var date = addDays(state.weekStart, d);
+
+      if (d === 6 && !state.assign[iso(date)]) continue;
 
       refs.list.appendChild(dayCard(date, DAY_NAMES[d]));
     }
@@ -454,8 +558,10 @@
 
   function dayCard(date, dayName) {
     var dateStr = iso(date);
-    var rows = rowsFor(dateStr);
-    var field = isFieldDay(rows);
+    var ownRows = rowsFor(dateStr);           // this date's stored rows
+    var dispRows = displayRowsFor(dateStr);   // the plan shown here after shift
+    var field = isFieldDay(ownRows);
+    var past = dateStr < iso(new Date());
     var card = GuiUI.el("div", "gui-card gui-day-card");
     var head = GuiUI.el("div", "gui-day-head");
 
@@ -463,20 +569,21 @@
       GuiUI.el("h3", "gui-day-title", dayName + " · " + shortDate(date))
     );
 
-    // The Field-day checkbox rides right after the title. Without rows there
-    // is nothing to write, so it waits for "Plan this day".
+    // The Field-day checkbox rides right after the title. Disabled without own
+    // rows to write to, and on past days -- an already-lived day is a frozen
+    // record and cannot be un-lived.
 
     var toggle = GuiUI.el("label", "gui-fieldtoggle");
     var cb = GuiUI.el("input");
 
     cb.type = "checkbox";
     cb.checked = field;
-    cb.disabled = !rows.length;
+    cb.disabled = !ownRows.length || past;
     toggle.appendChild(cb);
     toggle.appendChild(GuiUI.el("span", null, "Field day"));
     head.appendChild(toggle);
 
-    if (rows.length && !field) {
+    if (ownRows.length && !field) {
       head.appendChild(
         GuiUI.el("span", "gui-day-badge gui-day-badge-weather", "Weather day")
       );
@@ -486,7 +593,7 @@
       var body = { field: cb.checked ? "TRUE" : "FALSE" };
 
       GuiUI.status("Saving…", "busy");
-      patchEach(rows, body).then(function () {
+      patchEach(ownRows, body).then(function () {
         GuiUI.status("Day updated.", "ok");
         return loadWeek();
       }).catch(function (e) {
@@ -496,23 +603,36 @@
       });
     });
 
-    var actions = GuiUI.el("div", "gui-actions");
-    var edit = GuiUI.el("button", "gui-btn",
-      rows.length ? "Edit day" : "Plan this day");
+    if (!past && (dispRows.length || !ownRows.length)) {
+      var actions = GuiUI.el("div", "gui-actions");
+      var edit = GuiUI.el("button", "gui-btn",
+        dispRows.length ? "Edit day" : "Plan this day");
 
-    edit.addEventListener("click", function () { editDay(dateStr, rows); });
-    actions.appendChild(edit);
-    head.appendChild(actions);
+      edit.addEventListener("click", function () {
+        editDay(dateStr, ownRows, dispRows);
+      });
+      actions.appendChild(edit);
+      head.appendChild(actions);
+    }
+
     card.appendChild(head);
 
-    if (!rows.length) {
-      card.appendChild(GuiUI.el("p", "gui-empty", "Nothing scheduled."));
+    if (!dispRows.length) {
+      card.appendChild(
+        GuiUI.el(
+          "p",
+          "gui-empty",
+          ownRows.length && !field
+            ? "Weather day — plan moved forward."
+            : "Nothing scheduled."
+        )
+      );
       return card;
     }
 
     var bodyHost = GuiUI.el("div", "gui-day-body");
 
-    bodyHost.innerHTML = dayBodyHtml(rows);
+    bodyHost.innerHTML = dayBodyHtml(dispRows);
     card.appendChild(bodyHost);
     return card;
   }
@@ -530,8 +650,14 @@
     return v !== null && v !== undefined && v !== "" && v !== "-";
   }
 
-  function editDay(dateStr, rows) {
-    var lead = rows[0] || {};
+  function editDay(dateStr, ownRows, dispRows) {
+    ownRows = ownRows || [];
+    dispRows = dispRows || [];
+
+    // Prefill from the row currently DISPLAYED here (plan fields from the home
+    // plan, pinned fields overlaid from this date). Falls back to the date's
+    // own row when nothing is shown yet (the "Plan this day" path).
+    var lead = dispRows[0] || ownRows[0] || {};
     var lk = state.lookups;
     var m = GuiUI.modal("Edit day — " + dateStr, { wide: true });
     var forms = [];
@@ -627,11 +753,35 @@
         Object.keys(values).forEach(function (k) { body[k] = values[k]; });
       });
 
-      var save = rows.length
-        ? patchEach(rows, body)
-        : GuiApi.post("/schedule_days", merge(
-            { date: dateStr, patch_order: 1, field: "TRUE" }, body
-          ));
+      // Route each edit to the right physical rows: pinned fields (helper,
+      // times, weather) belong to THIS date; plan fields travel with the plan,
+      // so they write to the home rows the plan currently comes from.
+      var pinnedBody = {};
+      var planBody = {};
+
+      Object.keys(body).forEach(function (k) {
+        if (PINNED_FIELDS.indexOf(k) >= 0) pinnedBody[k] = body[k];
+        else planBody[k] = body[k];
+      });
+
+      var homeStr = state.assign ? state.assign[dateStr] : dateStr;
+      var homeRows = homeStr ? rowsFor(homeStr) : ownRows;
+
+      var save;
+
+      if (ownRows.length) {
+        save = Promise.resolve();
+        if (Object.keys(pinnedBody).length) {
+          save = save.then(function () { return patchEach(ownRows, pinnedBody); });
+        }
+        if (Object.keys(planBody).length && homeRows.length) {
+          save = save.then(function () { return patchEach(homeRows, planBody); });
+        }
+      } else {
+        save = GuiApi.post("/schedule_days", merge(
+          { date: dateStr, patch_order: 1, field: "TRUE" }, body
+        ));
+      }
 
       save.then(function () {
         m.close();
@@ -648,17 +798,17 @@
     bar.appendChild(ok);
     bar.appendChild(no);
 
-    if (rows.length) {
+    if (ownRows.length) {
       var del = GuiUI.el("button", "gui-btn gui-btn-danger", "Delete day");
 
       del.addEventListener("click", function () {
         GuiUI.confirm(
-          "Delete ALL " + rows.length + " row(s) for " + dateStr +
+          "Delete ALL " + ownRows.length + " row(s) for " + dateStr +
           "? This cannot be undone."
         ).then(function (yes) {
           if (!yes) return;
 
-          return delEach(rows).then(function () {
+          return delEach(ownRows).then(function () {
             m.close();
             GuiUI.status("Day deleted.", "ok");
             return loadWeek();
