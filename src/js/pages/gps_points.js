@@ -30,6 +30,48 @@
     return String(b || "").localeCompare(String(a || ""));
   }
 
+  // ---- patch derivation ----------------------------------------------------
+
+  // Most field-recorded points carry no patch_id. The patch is derivable,
+  // though: the boundary polygons (window.fieldPatches) say which patch a
+  // point falls inside. Same ray-cast the Map tab uses.
+
+  function ringsOf(geom) {
+    if (!geom || !geom.length) return [];
+    if (typeof geom[0][0] === "number") return [geom];
+    return geom;
+  }
+
+  function inRing(lat, lng, ring) {
+    var inside = false;
+
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      var yi = ring[i][0];
+      var xi = ring[i][1];
+      var yj = ring[j][0];
+      var xj = ring[j][1];
+      var hit = ((yi > lat) !== (yj > lat)) &&
+        (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+
+      if (hit) inside = !inside;
+    }
+    return inside;
+  }
+
+  function patchOf(lat, lng) {
+    var patches = window.fieldPatches || {};
+    var names = Object.keys(patches);
+
+    for (var i = 0; i < names.length; i++) {
+      var rings = ringsOf(patches[names[i]]);
+
+      for (var r = 0; r < rings.length; r++) {
+        if (inRing(lat, lng, rings[r])) return names[i];
+      }
+    }
+    return null;
+  }
+
   // ---- data ----------------------------------------------------------------
 
   function loadPoints() {
@@ -63,6 +105,15 @@
             has_nav_photo: !!p.has_nav_photo
           };
         });
+
+      // Fill the blanks: a point without a stored patch_id gets the patch
+      // whose boundary polygon contains it.
+
+      state.points.forEach(function (p) {
+        if (!p.patch_id) {
+          p.patch_id = patchOf(p.latitude, p.longitude);
+        }
+      });
 
       // Reverse alphabetical by name, NQ pulled ahead of NSP / NLB
       // (same ordering as the Nests page).
@@ -185,14 +236,24 @@
     m.body.appendChild(rowEl);
     m.body.appendChild(infoHost);
 
-    GuiUI.miniMap(mapBox, p.latitude, p.longitude, iconIdFor(p),
-      function () {
-        window.__guiMapFocus = {
-          lat: p.latitude, lng: p.longitude, zoom: 19
-        };
-        m.close();
-        location.hash = "map";
-      });
+    // Icon from /map_points (the same source as the Map tab), falling
+    // back to the class-based guess for points the view has no row for.
+
+    GuiApi.mapPoints().then(function (mps) {
+      var hit = mps.filter(function (r) {
+        return r.idx === p.point_id || r.name === p.point_name;
+      })[0];
+
+      GuiUI.miniMap(mapBox, p.latitude, p.longitude,
+        hit ? hit.icon : iconIdFor(p),
+        function () {
+          window.__guiMapFocus = {
+            lat: p.latitude, lng: p.longitude, zoom: 19
+          };
+          m.close();
+          location.hash = "map";
+        });
+    });
 
     // Photo: lazy per-point fetch (the list is photo-free).
 
@@ -427,7 +488,7 @@
 
       host.appendChild(filters);
 
-      refs.list = GuiUI.el("div");
+      refs.list = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.list);
 
       GuiApi.lookups().then(function (lk) {

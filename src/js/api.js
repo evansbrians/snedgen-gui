@@ -97,6 +97,21 @@
     });
   }
 
+  // /map_points is the ONE source of marker icon assignments (the
+  // v_map_point view). The mini maps look their point up here so their
+  // icon can never drift from the Map tab's. Cached per session.
+
+  var mapPointsCache = null;
+
+  function mapPoints() {
+    if (mapPointsCache) return Promise.resolve(mapPointsCache);
+
+    return request("GET", "/map_points").then(function (rows) {
+      mapPointsCache = rows || [];
+      return mapPointsCache;
+    }).catch(function () { return []; });
+  }
+
   // A disk photo (/photos/<id>) is raw bytes behind the bearer token, so an
   // <img src> cannot load it directly. Fetch with auth -> blob object URL.
 
@@ -127,6 +142,7 @@
     patch: function (path, body) { return request("PATCH", path, body); },
     del: function (path) { return request("DELETE", path); },
     lookups: lookups,
+    mapPoints: mapPoints,
     photoBlobUrl: photoBlobUrl,
     base: base,
     setBase: setBase,

@@ -256,7 +256,7 @@
             return "Maintenance — " + GuiUI.dash(r.event_date);
           },
           inlineEdit: {
-            ask: true,
+            ask: false,
             fields: logFields(),
             onSave: function (r, values) {
               return GuiApi.patch(
@@ -366,7 +366,7 @@
 
       host.appendChild(filters);
 
-      refs.cameraList = GuiUI.el("div");
+      refs.cameraList = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.cameraList);
 
       GuiApi.lookups().then(function (lk) {

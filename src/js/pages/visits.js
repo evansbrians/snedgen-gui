@@ -40,8 +40,10 @@
     return out;
   }
 
-  function shortDate(d) {
-    return MONTHS[d.getMonth()] + " " + d.getDate();
+  // Day before month, per the study's convention: "13 – 19 Jul, 2026".
+
+  function dayMonth(d) {
+    return d.getDate() + " " + MONTHS[d.getMonth()];
   }
 
   // ---- data ----------------------------------------------------------------
@@ -177,24 +179,7 @@
     refs.visitList.appendChild(
       GuiUI.table(VISIT_COLS, visibleVisits(), {
         empty: "No visits match these filters.",
-        onRowClick: function (row) {
-          GuiUI.rowMenu(
-            "Visit",
-            GuiUI.dash(row.patch_id) + " — " + GuiUI.dash(row.visit_date),
-            [
-              {
-                label: "Modify",
-                kind: "primary",
-                run: function () { editVisit(row); }
-              },
-              {
-                label: "Delete",
-                kind: "danger",
-                run: function () { deleteVisit(row); }
-              }
-            ]
-          );
-        }
+        onRowClick: function (row) { editVisit(row); }
       })
     );
   }
@@ -223,6 +208,16 @@
           .then(function () {
             return loadVisits();
           });
+      },
+      {
+        extraActions: [{
+          label: "Delete",
+          kind: "danger",
+          run: function (m) {
+            m.close();
+            deleteVisit(row);
+          }
+        }]
       }
     );
   }
@@ -247,9 +242,11 @@
   function weekLabel() {
     var mon = state.weekStart;
     var sun = addDays(mon, 6);
+    var left = (mon.getMonth() === sun.getMonth())
+      ? String(mon.getDate())
+      : dayMonth(mon);
 
-    return shortDate(mon) + " – " + shortDate(sun) + ", " +
-      sun.getFullYear();
+    return left + " – " + dayMonth(sun) + ", " + sun.getFullYear();
   }
 
   function renderWeekBar() {
@@ -355,7 +352,7 @@
 
       host.appendChild(filters);
 
-      refs.visitList = GuiUI.el("div");
+      refs.visitList = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.visitList);
 
       state.weekStart = mondayOf(new Date());

@@ -155,13 +155,17 @@
     gps_points: {
       type: "FeatureCollection",
       features: [
-        feature("pt-n060", "N060", "Nest", -78.1655, 38.8905),
-        feature("pt-n061", "N061", "Nest", -78.1710, 38.8930),
+        // Coordinates sit INSIDE real patch polygons so the GUI's derived
+        // patch column has something to find in demo mode.
+
+        feature("pt-n060", "N060", "Nest", -78.149912, 38.896706),
+        feature("pt-n061", "N061", "Nest", -78.171533, 38.892349),
         feature("pt-cam-1", "coyote_trailcam_1", "Landmark",
-          -78.1698, 38.8922),
+          -78.171533, 38.892349),
         feature("pt-lm-1", "Big oak", "Landmark", -78.1672, 38.8917),
-        feature("pt-pc-1", "PC coyote", "point_count", -78.1701, 38.8926),
-        feature("pt-cb-1", "Board 3", "coverboard", -78.1690, 38.8918)
+        feature("pt-pc-1", "PC coyote", "point_count",
+          -78.156907, 38.892612),
+        feature("pt-cb-1", "Board 3", "coverboard", -78.171533, 38.892349)
       ]
     },
 
@@ -381,6 +385,29 @@
     }
 
     if (head === "map_points") return buildMapPoints();
+
+    if (head === "tracks") {
+      return [
+        {
+          track_id: "demo-track-1", name: "Coyote sweep",
+          activity: "Nest search", patch_id: "coyote", length_m: 240,
+          created_at: "2026-07-18T09:12:00",
+          points: [
+            { lat: 38.8920, lng: -78.1712 }, { lat: 38.8923, lng: -78.1706 },
+            { lat: 38.8926, lng: -78.1699 }, { lat: 38.8922, lng: -78.1692 }
+          ]
+        },
+        {
+          track_id: "demo-track-2", name: "Leech edge walk",
+          activity: "Nest search", patch_id: "leech", length_m: 180,
+          created_at: "2026-07-19T07:40:00",
+          points: [
+            { lat: 38.8903, lng: -78.1660 }, { lat: 38.8906, lng: -78.1655 },
+            { lat: 38.8909, lng: -78.1651 }
+          ]
+        }
+      ];
+    }
 
     if (head === "coverboard_checks") {
       if (sub === "obs") {

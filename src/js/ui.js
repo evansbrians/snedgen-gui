@@ -160,6 +160,7 @@
     cols.forEach(function (c) {
       hrow.appendChild(el("th", null, c.label));
     });
+    if (opts.rowDelete) hrow.appendChild(el("th", null, ""));
     thead.appendChild(hrow);
     t.appendChild(thead);
 
@@ -184,6 +185,24 @@
 
       tr.appendChild(el("td", null, val));
     });
+
+    // opts.rowDelete(row): an X at the row's end deletes it directly --
+    // no menu in between. Out of the tab order, and its click never
+    // triggers the row's own edit action.
+
+    if (opts.rowDelete) {
+      var dtd = el("td", "gui-row-actions");
+      var db = el("button", "gui-btn gui-btn-sm gui-btn-danger", "×");
+
+      db.title = "Delete row";
+      db.tabIndex = -1;
+      db.addEventListener("click", function (e) {
+        e.stopPropagation();
+        opts.rowDelete(row);
+      });
+      dtd.appendChild(db);
+      tr.appendChild(dtd);
+    }
 
     var clickable = opts.onRowClick || opts.inlineEdit;
 
@@ -265,7 +284,7 @@
       var barRow = el("tr", "gui-row-editbar");
       var barCell = el("td");
 
-      barCell.colSpan = cols.length;
+      barCell.colSpan = cols.length + (opts.rowDelete ? 1 : 0);
 
       var bar = el("div", "gui-actions gui-actions-inline");
       var ok = el("button", "gui-btn gui-btn-sm gui-btn-primary", "Save");
@@ -325,6 +344,72 @@
     return tr;
   }
 
+  // ---- date + time cells ---------------------------------------------------
+
+  // Everything in this study is ISO 8601 (yyyy-mm-dd) on a 24-hour clock.
+  // Date and time fields are therefore plain validated TEXT cells -- the
+  // browser's locale widgets (mm/dd/yyyy, AM/PM) never appear.
+
+  function pad2(s) {
+    s = String(s);
+    return s.length < 2 ? "0" + s : s;
+  }
+
+  function normDate(v) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(v).trim());
+
+    if (!m) return String(v).trim();
+    return m[1] + "-" + pad2(m[2]) + "-" + pad2(m[3]);
+  }
+
+  function dateOk(v) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(v);
+  }
+
+  function normTime(v) {
+    var s = String(v).trim();
+    var m = /^(\d{1,2}):(\d{1,2})$/.exec(s);
+
+    if (!m && /^\d{3,4}$/.test(s)) {
+      m = [s, s.slice(0, s.length - 2), s.slice(-2)];
+    }
+    if (!m) return s;
+    return pad2(m[1]) + ":" + pad2(m[2]);
+  }
+
+  function timeOk(v) {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  }
+
+  function flagFormat(input, ok) {
+    var bad = input.value !== "" && !ok(input.value);
+
+    input.classList.toggle("gui-cell-invalid", bad);
+    input.title = bad ? "Not an allowed value" : "";
+  }
+
+  function wireDate(input) {
+    input.addEventListener("change", function () {
+      if (input.value) input.value = normDate(input.value);
+      flagFormat(input, dateOk);
+    });
+  }
+
+  function wireTime(input) {
+    // The colon self-inserts between the second and third digit, so Tara
+    // types "0605" and the cell reads 06:05.
+
+    input.addEventListener("input", function () {
+      if (/^\d{3,4}$/.test(input.value)) {
+        input.value = input.value.slice(0, 2) + ":" + input.value.slice(2);
+      }
+    });
+    input.addEventListener("change", function () {
+      if (input.value) input.value = normTime(input.value);
+      flagFormat(input, timeOk);
+    });
+  }
+
   // ---- inputs --------------------------------------------------------------
 
   function makeInput(fd, value) {
@@ -341,8 +426,23 @@
       input = el("textarea", "gui-input");
     } else {
       input = el("input", "gui-input");
-      input.type = fd.type === "datalist" ? "text" : (fd.type || "text");
-      if (fd.type === "datalist") input.setAttribute("list", fd.listId);
+
+      var t = fd.type || "text";
+
+      if (t === "datalist") {
+        input.type = "text";
+        input.setAttribute("list", fd.listId);
+      } else if (t === "date") {
+        input.type = "text";
+        input.placeholder = fd.placeholder || "yyyy-mm-dd";
+        wireDate(input);
+      } else if (t === "time") {
+        input.type = "text";
+        input.placeholder = fd.placeholder || "HH:MM";
+        wireTime(input);
+      } else {
+        input.type = t;
+      }
     }
 
     if (fd.placeholder) input.placeholder = fd.placeholder;
@@ -576,7 +676,6 @@
       var input = makeInput(c, row[c.key]);
 
       input.className = "gui-cell";
-      if (c.width) input.style.width = c.width;
       input.dataset.r = r;
       input.dataset.c = ci;
 
@@ -659,6 +758,21 @@
           return;
         }
 
+        // Tab is handled HERE, not left to the browser: a change can
+        // rebuild the tbody, and native Tab would then walk off a detached
+        // node to somewhere unpredictable. Wraps to the next / previous
+        // row at the edges, like a spreadsheet.
+
+        if (e.key === "Tab") {
+          var nc = cc + (e.shiftKey ? -1 : 1);
+          var nr = rr;
+
+          if (nc >= cols.length) { nr = rr + 1; nc = 0; }
+          if (nc < 0) { nr = rr - 1; nc = cols.length - 1; }
+          go(nr, nc);
+          return;
+        }
+
         if (e.key === "Enter") {
           go(rr + 1, cc);
         } else if (e.key === "ArrowDown" && !isSelect) {
@@ -695,6 +809,11 @@
 
         cols.forEach(function (c, ci) {
           var td = el("td");
+
+          // Width lives on the CELL, the input fills it edge-to-edge --
+          // clicking anywhere in a cell lands in its input.
+
+          if (c.width) td.style.width = c.width;
           td.appendChild(cellInput(row, c, i, ci));
           tr.appendChild(td);
         });
@@ -832,10 +951,11 @@
 
   // ---- mini map ------------------------------------------------------------
 
-  // The static nest-info-style mini map (Esri imagery, one fieldIcons
-  // marker, zoom 18, no interactions) shared by the nest and GPS-point
-  // popups. onClick fires from anywhere on the map (the jump to the Map
-  // tab). Returns the Leaflet map, or null.
+  // The nest-info-style mini map (Esri imagery, one fieldIcons marker,
+  // zoom 18) shared by the nest and GPS-point popups. Pannable and
+  // zoomable; onClick becomes an "Open in Map tab" button in the corner
+  // (a whole-map click would fight panning). Returns the Leaflet map,
+  // or null.
 
   function miniMap(host, lat, lng, iconId, onClick) {
     if (!window.L || lat === null || lat === undefined ||
@@ -846,12 +966,7 @@
 
     var mini = window.L.map(host, {
       attributionControl: false,
-      zoomControl: false,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false
+      zoomControl: true
     });
 
     window.L.tileLayer(
@@ -880,8 +995,14 @@
     }
 
     if (onClick) {
-      host.title = "Open in the Map tab";
-      host.addEventListener("click", onClick);
+      var open = el("button", "gui-btn gui-btn-sm gui-minimap-open",
+        "Open in Map tab");
+
+      open.addEventListener("click", function (e) {
+        e.stopPropagation();
+        onClick();
+      });
+      host.appendChild(open);
     }
 
     setTimeout(function () {

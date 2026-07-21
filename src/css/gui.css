@@ -52,8 +52,17 @@
 
 * { box-sizing: border-box; }
 
+/* Frozen chrome, like a spreadsheet's frozen rows: the header, filters and
+   column headings hold still; only the TABLE scrolls. The body never
+   scrolls -- each list page's table area does. */
+
+html, body { height: 100%; }
+
 body {
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--gui-bg);
   color: var(--gui-fg);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -123,7 +132,43 @@ body {
 
 /* layout */
 
-.gui-main { padding: 4px 20px 60px; }
+.gui-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 20px 14px;
+}
+
+.gui-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* The scrolling region of a list page: everything above it (heading,
+   subset dropdowns, search) stays put; the table inside it scrolls. */
+
+.gui-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gui-scroll .gui-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gui-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 
 .gui-page-head {
   display: flex;
@@ -271,10 +316,20 @@ select.gui-cell {
   padding: 1px 2px;
 }
 
-/* Tighten the cells' padding while a row is editing so inputs sit flush,
-   like a selected spreadsheet row. */
+/* While a row is editing its cells sit FLUSH, exactly like the grid:
+   zero padding, shared 1px borders, the input filling the cell. */
 
-.gui-row-editing td { padding: 2px 3px; }
+.gui-row-editing td {
+  padding: 0;
+  border: 1px solid var(--gui-cell-border);
+}
+
+.gui-row-editing .gui-cell {
+  border: none;
+  height: 28px;
+  min-width: 0;
+  display: block;
+}
 
 /* The live grid IS a spreadsheet: cells flush against each other, shared
    1px gridlines, the input filling its cell edge-to-edge. */
@@ -291,7 +346,8 @@ select.gui-cell {
 .gui-grid .gui-cell {
   border: none;
   height: 28px;
-  min-width: 3.5em;
+  min-width: 0;
+  width: 100%;
   display: block;
 }
 
@@ -304,15 +360,40 @@ select.gui-cell {
 
 /* Plain cells, spreadsheet-style: no spinner arrows on number inputs. */
 
-.gui-grid input.gui-cell::-webkit-outer-spin-button,
-.gui-grid input.gui-cell::-webkit-inner-spin-button {
+input.gui-cell::-webkit-outer-spin-button,
+input.gui-cell::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.gui-grid input.gui-cell[type="number"] {
+input.gui-cell[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+/* The mini map's jump button + interactive mini maps. */
+
+.gui-nestinfo-map { position: relative; }
+
+.gui-minimap-open {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 900;
+}
+
+/* The Map tab's layers control, doubled when expanded. */
+
+.leaflet-control-layers-expanded {
+  font-size: 22px;
+  line-height: 1.55;
+  padding: 12px 16px;
+}
+
+.leaflet-control-layers-expanded input[type="radio"],
+.leaflet-control-layers-expanded input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
 }
 
 /* A value that fails the cell's validation flags red, spreadsheet-style. */

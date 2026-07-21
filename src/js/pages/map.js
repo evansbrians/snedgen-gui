@@ -242,6 +242,11 @@
       group.addLayer(marker);
       state.markers.push({ row: row, marker: marker });
     });
+
+    // Paths and search tracks re-filter with the patch selection too.
+
+    drawPaths();
+    drawTracks();
   }
 
   // Patch polygons drawn EXACTLY as the app's map_weather.js renderShapes
@@ -275,20 +280,95 @@
   }
 
   // Garmin paths (window.fieldPaths), styled as the app styles them.
+  // An overlay in the layers control, and SUBSET to the selected patch:
+  // a path shows only when one of its (sampled) vertices falls inside
+  // the selected boundary.
+
+  function linesOf(path) {
+    if (!path || !path.length) return [];
+    if (typeof path[0][0] === "number") return [path];
+    return path;
+  }
+
+  function anyVertexInPatch(lines, name) {
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var step = Math.max(1, Math.floor(line.length / 25));
+
+      for (var j = 0; j < line.length; j += step) {
+        if (inPatch(line[j][0], line[j][1], name)) return true;
+      }
+    }
+    return false;
+  }
 
   function drawPaths() {
-    if (!window.fieldPaths || !state.paths) return;
+    var group = state.overlays.Paths;
 
-    state.paths.clearLayers();
-    window.fieldPaths.forEach(function (path) {
-      if (!path || !path.length) return;
+    if (!group) return;
+    group.clearLayers();
+    (window.fieldPaths || []).forEach(function (path) {
+      var lines = linesOf(path);
 
-      state.paths.addLayer(window.L.polyline(path, {
+      if (!lines.length) return;
+      if (state.options.patch !== "__all__" &&
+          !anyVertexInPatch(lines, state.options.patch)) {
+        return;
+      }
+      group.addLayer(window.L.polyline(lines, {
         weight: 3,
         opacity: 0.7,
         dashArray: "2, 5",
         color: "#ffff00"
       }));
+    });
+  }
+
+  // Search tracks (GET /tracks): walked search paths recorded by the
+  // field app. Solid orange, so they read apart from the dashed yellow
+  // Garmin paths. Subset by the track's own patch label, falling back to
+  // geometry.
+
+  function loadTracks() {
+    return GuiApi.get("/tracks").then(function (rows) {
+      state.tracks = rows || [];
+      drawTracks();
+    }).catch(function () {
+      state.tracks = [];
+    });
+  }
+
+  function drawTracks() {
+    var group = state.overlays["Search tracks"];
+
+    if (!group) return;
+    group.clearLayers();
+    (state.tracks || []).forEach(function (t) {
+      var pts = (t.points || []).map(function (p) {
+        return [p.lat, p.lng];
+      }).filter(function (ll) {
+        return typeof ll[0] === "number" && typeof ll[1] === "number";
+      });
+
+      if (pts.length < 2) return;
+      if (state.options.patch !== "__all__" &&
+          t.patch_id !== state.options.patch &&
+          !anyVertexInPatch([pts], state.options.patch)) {
+        return;
+      }
+
+      var line = window.L.polyline(pts, {
+        weight: 3,
+        opacity: 0.8,
+        color: "#ff7f00"
+      });
+
+      line.bindPopup(
+        GuiUI.dash(t.name) +
+        (t.activity ? " — " + t.activity : "") +
+        (t.created_at ? "<br>" + String(t.created_at).slice(0, 10) : "")
+      );
+      group.addLayer(line);
     });
   }
 
@@ -416,6 +496,14 @@
     toggle(box, "Include patch boundaries",
       state.map.hasLayer(state.overlays.Patches),
       function (on) { setGroup("Patches", on); });
+
+    toggle(box, "Show paths",
+      state.map.hasLayer(state.overlays.Paths),
+      function (on) { setGroup("Paths", on); });
+
+    toggle(box, "Show search tracks",
+      state.map.hasLayer(state.overlays["Search tracks"]),
+      function (on) { setGroup("Search tracks", on); });
 
     toggle(box, "Show sampling points",
       state.map.hasLayer(state.overlays.Coverboards),
@@ -594,7 +682,12 @@
         state.overlays[name] = window.L.layerGroup().addTo(state.map);
       });
       state.waypoints = window.L.layerGroup().addTo(state.map);
-      state.paths = window.L.layerGroup().addTo(state.map);
+
+      // Paths start ON; search tracks start OFF -- both live in the
+      // layers control so either can be flipped there.
+
+      state.overlays.Paths = window.L.layerGroup().addTo(state.map);
+      state.overlays["Search tracks"] = window.L.layerGroup();
       drawPaths();
 
       // The layers control, exactly as addLayersControl builds it.
@@ -605,6 +698,8 @@
           Precipitation: state.overlays.Precipitation,
           NEXRAD: state.overlays.NEXRAD,
           Patches: state.overlays.Patches,
+          Paths: state.overlays.Paths,
+          "Search tracks": state.overlays["Search tracks"],
           Coverboards: state.overlays.Coverboards,
           "Trail Cameras": state.overlays["Trail Cameras"],
           "Point Counts": state.overlays["Point Counts"],
@@ -631,6 +726,7 @@
       }
 
       loadData();
+      loadTracks();
       applyFocus();
     },
 

@@ -350,7 +350,7 @@
             return "Observation — " + GuiUI.dash(r.species);
           },
           inlineEdit: {
-            ask: true,
+            ask: false,
             fields: obsFields(refs.lk),
             onSave: function (r, values) {
               return GuiApi.patch("/coverboard_obs/" + r.obs_id, values)
@@ -467,7 +467,7 @@
 
       host.appendChild(filters);
 
-      refs.checkList = GuiUI.el("div");
+      refs.checkList = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.checkList);
 
       GuiApi.lookups().then(function (lk) {

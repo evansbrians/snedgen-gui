@@ -261,18 +261,31 @@
           var lng = gp &&
             (gp.longitude !== undefined ? gp.longitude : gp.lng);
 
-          var iconId = row.nest_fate ? "nest_inactive"
-            : (Number(row.artificial_candidate) === 1 &&
-               /^NQ/.test(row.nest_id) ? "nest_artificial" : "nest_active");
+          // The icon is whatever /map_points (v_map_point) assigned THIS
+          // nest -- the same source the Map tab draws from, so the two can
+          // never disagree. The heuristic below only covers a nest the
+          // view has no row for.
 
-          GuiUI.miniMap(mapBox, lat, lng, iconId, function () {
-            window.__guiMapFocus = { lat: lat, lng: lng, zoom: 19 };
+          GuiApi.mapPoints().then(function (mps) {
+            var hit = mps.filter(function (r2) {
+              return r2.name === row.nest_id;
+            })[0];
 
-            // Coming BACK to the Nests tab reopens this nest's popup.
+            var iconId = hit ? hit.icon
+              : (row.nest_fate ? "nest_inactive"
+                : (Number(row.artificial_candidate) === 1 &&
+                   /^NQ/.test(row.nest_id)
+                    ? "nest_artificial" : "nest_active"));
 
-            state.reopenNest = row.nest_id;
-            m.close();
-            location.hash = "map";
+            GuiUI.miniMap(mapBox, lat, lng, iconId, function () {
+              window.__guiMapFocus = { lat: lat, lng: lng, zoom: 19 };
+
+              // Coming BACK to the Nests tab reopens this nest's popup.
+
+              state.reopenNest = row.nest_id;
+              m.close();
+              location.hash = "map";
+            });
           });
           buildPhoto(photoBox, gp, detail);
         })
@@ -557,8 +570,9 @@
           rowTitle: function (r) {
             return "Check — " + GuiUI.dash(r.check_date);
           },
+          rowDelete: function (r) { deleteInterval(r); },
           inlineEdit: {
-            ask: true,
+            ask: false,
             fields: intervalFields(refs.lk),
             onSave: function (r, values) {
               return GuiApi.patch(
@@ -567,8 +581,7 @@
                 GuiUI.status("Check saved.", "ok");
                 return loadIntervals(row.nest_id).then(renderIntervalTable);
               });
-            },
-            onDelete: function (r) { deleteInterval(r); }
+            }
           }
         })
       );
@@ -735,7 +748,7 @@
 
       host.appendChild(filters);
 
-      refs.nestList = GuiUI.el("div");
+      refs.nestList = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.nestList);
 
       GuiApi.lookups().then(function (lk) {

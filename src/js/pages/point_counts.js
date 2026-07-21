@@ -148,12 +148,7 @@
         type: "select",
         options: opts(lk.patches, "patch_id", "label")
       },
-      {
-        key: "start_time",
-        label: "Start time",
-        type: "text",
-        placeholder: "HH:MM"
-      },
+      { key: "start_time", label: "Start time", type: "time" },
       {
         key: "observer_id",
         label: "Observer",
@@ -279,7 +274,7 @@
     m.body.appendChild(head);
 
     var f = GuiUI.form(countFields(state.lk),
-      row || { count_date: todayIso() }, "pc_hdr_");
+      row || { count_date: todayIso(), observer_id: "TNS" }, "pc_hdr_");
 
     f.el.addEventListener("change", function () { dirty = true; });
     m.body.appendChild(f.el);
@@ -469,7 +464,7 @@
       head.appendChild(add);
       host.appendChild(head);
 
-      refs.list = GuiUI.el("div");
+      refs.list = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.list);
 
       GuiApi.lookups().then(function (lk) {
