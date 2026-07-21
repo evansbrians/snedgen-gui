@@ -302,6 +302,19 @@ select.gui-cell {
   z-index: 1;
 }
 
+/* Plain cells, spreadsheet-style: no spinner arrows on number inputs. */
+
+.gui-grid input.gui-cell::-webkit-outer-spin-button,
+.gui-grid input.gui-cell::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.gui-grid input.gui-cell[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* A value that fails the cell's validation flags red, spreadsheet-style. */
 
 .gui-cell-invalid {

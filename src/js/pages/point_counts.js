@@ -148,7 +148,12 @@
         type: "select",
         options: opts(lk.patches, "patch_id", "label")
       },
-      { key: "start_time", label: "Start time", type: "time" },
+      {
+        key: "start_time",
+        label: "Start time",
+        type: "text",
+        placeholder: "HH:MM"
+      },
       {
         key: "observer_id",
         label: "Observer",
@@ -176,8 +181,7 @@
       {
         key: "species",
         label: "Species",
-        type: "datalist",
-        listId: "pcSpecies",
+        type: "text",
         width: "7em",
         uppercase: true,
         validate: function (v) {
@@ -335,6 +339,15 @@
         }
       });
 
+      // Start time is stored on a 24-hour clock, e.g. 06:05 or 17:30.
+
+      var t = header.start_time;
+
+      if (t && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(t))) {
+        out.push("Stop-level: Start time must be 24-hour HH:MM " +
+          "(e.g. 06:05).");
+      }
+
       INTERVALS.forEach(function (i) {
         var bad = 0;
         var empty = 0;
@@ -478,7 +491,6 @@
           state.speciesSet[String(s.value).toUpperCase()] = true;
         });
 
-        host.appendChild(GuiUI.datalist("pcSpecies", engine));
         add.addEventListener("click", function () { openCount(null); });
         return loadCounts();
       });
