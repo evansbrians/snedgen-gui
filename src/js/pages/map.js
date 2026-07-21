@@ -229,6 +229,28 @@
 
     var zs = zoomScale();
 
+    // For the artificial-candidates view: every nest NUMBER that exists
+    // (or ever existed) under the NQ prefix. N104 -> NQ104 conversion
+    // means both N104 and NQ104 leave the candidate pool. A nest wearing
+    // an artificial icon is a conversion too, even without an NQ row.
+
+    var nqNums = {};
+
+    if (state.options.artOnly) {
+      state.rows.forEach(function (r) {
+        if (r.class !== "nest") return;
+
+        var m = /^NQ(\d+)/.exec(String(r.name || ""));
+
+        if (m) nqNums[m[1]] = true;
+        if (/artificial/.test(String(r.icon || ""))) {
+          var m2 = /^N[A-Z]*?(\d+)/.exec(String(r.name || ""));
+
+          if (m2) nqNums[m2[1]] = true;
+        }
+      });
+    }
+
     state.rows.forEach(function (row) {
       if (!rowVisible(row)) return;
 
@@ -236,12 +258,20 @@
       // only -- and a currently-active NQ nest is already placed, so it
       // drops out too. The other classes stay put.
 
+      // NO NQ nest shows in the candidate view -- and neither does a
+      // nest that has been CONVERTED to NQ (N104 and NQ104 both drop
+      // once the conversion exists).
+
       if (state.options.artOnly && row.class === "nest") {
+        var nm = String(row.name || "");
+
         if (Number(row.artificial_candidate) !== 1) return;
-        if (/^NQ/.test(String(row.name || "")) &&
-            Number(row.is_current) !== 0) {
-          return;
-        }
+        if (/^NQ/.test(nm)) return;
+        if (/artificial/.test(String(row.icon || ""))) return;
+
+        var numM = /^N[A-Z]*?(\d+)/.exec(nm);
+
+        if (numM && nqNums[numM[1]]) return;
       }
 
       var icon = leafletIcon(row, zs);

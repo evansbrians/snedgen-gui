@@ -35,6 +35,30 @@
     return Number(n.max_eggs) > 0 || Number(n.max_young) > 0;
   }
 
+  // Available candidates: flagged artificial_candidate, not an NQ nest,
+  // and not yet CONVERTED -- once NQ104 exists, N104 is spent. Same rule
+  // as the map's Artificial candidates view. Conversion is checked
+  // against ALL nests, not just the selected patch.
+
+  function availableCandidates(rows) {
+    var nqNums = {};
+
+    state.nests.forEach(function (n) {
+      var m = /^NQ(\d+)/.exec(String(n.nest_id || ""));
+
+      if (m) nqNums[m[1]] = true;
+    });
+
+    return rows.filter(function (n) {
+      if (Number(n.artificial_candidate) !== 1) return false;
+      if (isArtificial(n)) return false;
+
+      var m = /^N[A-Z]*?(\d+)/.exec(String(n.nest_id || ""));
+
+      return !(m && nqNums[m[1]]);
+    });
+  }
+
   function loadNests() {
     GuiUI.status("Loading summary…", "busy");
 
@@ -72,7 +96,9 @@
       ["Artificial nests", art.length],
       ["Nests with interval data", nonArt.filter(hasEggOrYoung).length],
       ["Current natural nests", nonArt.filter(isCurrent).length],
-      ["Current artificial nests", art.filter(isCurrent).length]
+      ["Current artificial nests", art.filter(isCurrent).length],
+      ["Available artificial nest candidates",
+        availableCandidates(rows).length]
     ];
 
     refs.list.innerHTML = "";
