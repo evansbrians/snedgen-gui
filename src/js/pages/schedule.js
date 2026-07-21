@@ -146,14 +146,6 @@
   // stored (the server roll-forward freezes the as-lived record). This mirrors
   // the verified reference in outputs/sched/assign.py.
 
-  var PLAN_FIELDS = [
-    "patch_count", "boards", "check_nests", "predator_cameras", "notes",
-    "search_patch_1", "tns_patch_1", "helper_patch_1",
-    "search_patch_2", "tns_patch_2", "helper_patch_2",
-    "search_patch_3", "tns_patch_3", "helper_patch_3",
-    "search_patch_4", "tns_patch_4", "helper_patch_4"
-  ];
-
   var PINNED_FIELDS = [
     "helper", "weather", "field", "arrive", "sunrise",
     "departure_time", "scbi_departure_time", "point_count_time"
