@@ -580,6 +580,20 @@
       input.dataset.r = r;
       input.dataset.c = ci;
 
+      // Validated cells, like a spreadsheet's data validation: an entry
+      // that fails c.validate(v) stays visible but the cell flags red, and
+      // the page's save-time check refuses to submit it.
+
+      function markValidity(v) {
+        var bad = c.validate &&
+          v !== null && v !== undefined && v !== "" && !c.validate(v);
+
+        input.classList.toggle("gui-cell-invalid", !!bad);
+        input.title = bad ? "Not an allowed value" : "";
+      }
+
+      markValidity(row[c.key]);
+
       input.addEventListener("change", function () {
         var v = readInput(input, c);
 
@@ -590,6 +604,7 @@
           input.value = v;
         }
         row[c.key] = v;
+        markValidity(v);
         applyInherit(row);
 
         var last = data[data.length - 1];

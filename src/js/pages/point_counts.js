@@ -1,14 +1,19 @@
 // point_counts.js -- mirrors point_counts.xlsx ("her shape").
 //
-// Her sheet is one row per interval x species x detection, with FIVE
-// distance columns to drop counts into. A point count runs ~21 rows (max
-// 35), so the counts are a live grid, not a form per row.
+// Her sheet is one row per species x detection within an interval, with
+// FIVE distance columns to drop counts into. The modal shows THREE grids,
+// one per interval (every count has intervals 1-3), so the interval column
+// disappears from the sheet exactly as it does from her paper flow.
 //
-// The DB stores one row per distance (count_interval). The wide<->long pivot
-// that nightly_load.R does in R happens here instead, on save.
+// Spreadsheet semantics, not web-form semantics:
+// - No dropdowns. Species and Det are validated text cells (lower case
+//   auto-fills upper); a bad value flags red like spreadsheet data
+//   validation, and Save refuses until it is fixed.
+// - ONE Save button, at the bottom, pushes the stop-level data AND all
+//   three interval grids together.
 //
-// Interaction: clicking a row (or New point count) opens ONE wide modal:
-// stop-level data on top, the counts grid below. No intermediate menu.
+// The DB stores one row per distance (count_interval). The wide<->long
+// pivot that nightly_load.R did in R happens here instead, on save.
 "use strict";
 
 (function () {
@@ -20,12 +25,17 @@
     { key: "d5", label: "> 100 m", db: "> 100 m" }
   ];
 
-  var state = { counts: [], lk: null };
+  var INTERVALS = [1, 2, 3];
+  var DETECTIONS = ["A", "V", "B"];
+
+  var state = { counts: [], lk: null, speciesSet: {} };
   var refs = {};
 
   // ---- wide <-> long -------------------------------------------------------
 
-  function toApi(gridRows, pointCountId) {
+  // One grid's rows -> long API rows for its interval.
+
+  function toApi(gridRows, pointCountId, interval) {
     var out = [];
 
     gridRows.forEach(function (r) {
@@ -38,7 +48,7 @@
 
         out.push({
           point_count_id: pointCountId,
-          interval: Number(r.interval),
+          interval: interval,
           species: r.species,
           detection: r.detection,
           distance: d.db,
@@ -49,26 +59,36 @@
     return out;
   }
 
-  function toGrid(apiRows) {
-    var byKey = {};
-    var order = [];
+  // Long API rows -> { 1: [rows], 2: [rows], 3: [rows] }, one wide sheet
+  // per interval, keyed on species + detection.
+
+  function toGrids(apiRows) {
+    var grids = { 1: {}, 2: {}, 3: {} };
+    var order = { 1: [], 2: [], 3: [] };
 
     (apiRows || []).forEach(function (r) {
-      var k = r.interval + "|" + r.species + "|" + r.detection;
+      var i = Number(r.interval);
 
-      if (!byKey[k]) {
-        byKey[k] = {
-          interval: r.interval, species: r.species, detection: r.detection
-        };
-        order.push(k);
+      if (!grids[i]) return;
+
+      var k = r.species + "|" + r.detection;
+
+      if (!grids[i][k]) {
+        grids[i][k] = { species: r.species, detection: r.detection };
+        order[i].push(k);
       }
 
       DIST.forEach(function (d) {
-        if (d.db === r.distance) byKey[k][d.key] = r.count;
+        if (d.db === r.distance) grids[i][k][d.key] = r.count;
       });
     });
 
-    return order.map(function (k) { return byKey[k]; });
+    var out = {};
+
+    INTERVALS.forEach(function (i) {
+      out[i] = order[i].map(function (k) { return grids[i][k]; });
+    });
+    return out;
   }
 
   // ---- data ----------------------------------------------------------------
@@ -111,6 +131,14 @@
     );
   }
 
+  var HEADER_FIELDS = [
+    { key: "count_date", label: "Date" },
+    { key: "patch_id", label: "Patch" },
+    { key: "start_time", label: "Start time" },
+    { key: "observer_id", label: "Observer" },
+    { key: "weather", label: "Weather" }
+  ];
+
   function countFields(lk) {
     return [
       { key: "count_date", label: "Date", type: "date", required: true },
@@ -141,17 +169,54 @@
     return d.getFullYear() + "-" + mo + "-" + day;
   }
 
-  // ---- the combined modal --------------------------------------------------
+  // ---- grid columns (validated text cells, NO dropdowns) -------------------
 
-  // One modal, existing or new: stop-level data on top, counts below. For a
-  // NEW count the grid unlocks once the stop-level row is saved (the counts
-  // need a point_count_id to attach to).
+  function gridCols() {
+    var cols = [
+      {
+        key: "species",
+        label: "Species",
+        type: "datalist",
+        listId: "pcSpecies",
+        width: "7em",
+        uppercase: true,
+        validate: function (v) {
+          return state.speciesSet[String(v).toUpperCase()] === true;
+        }
+      }
+    ];
+
+    DIST.forEach(function (d) {
+      cols.push({
+        key: d.key,
+        label: d.label,
+        type: "number",
+        width: "4.5em",
+        validate: function (v) {
+          return !isNaN(Number(v)) && Number(v) >= 0;
+        }
+      });
+    });
+
+    cols.push({
+      key: "detection",
+      label: "Det",
+      type: "text",
+      width: "4em",
+      uppercase: true,
+      validate: function (v) {
+        return DETECTIONS.indexOf(String(v).toUpperCase()) !== -1;
+      }
+    });
+    return cols;
+  }
+
+  // ---- the combined modal --------------------------------------------------
 
   function openCount(row) {
     var isNew = !row;
     var dirty = false;
-
-    // Closing with unsaved counts warns first, like a spreadsheet would.
+    var grids = {};          // interval -> GuiUI.grid
 
     var m = GuiUI.modal(
       isNew ? "New point count" : "Point count — " + countTitle(row),
@@ -161,7 +226,7 @@
           if (!dirty) return true;
 
           GuiUI.confirm(
-            "The counts have unsaved changes. Close without saving?"
+            "There are unsaved changes. Close without saving?"
           ).then(function (yes) {
             if (yes) handle.close(true);
           });
@@ -170,12 +235,10 @@
       }
     );
 
-    // Cmd/Ctrl-S saves the counts instead of the web page.
-
     m.el.addEventListener("keydown", function (e) {
       if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "s") {
         e.preventDefault();
-        saveGridNow();
+        saveAll();
       }
     });
 
@@ -184,12 +247,6 @@
     var head = GuiUI.el("div", "gui-page-head");
 
     head.appendChild(GuiUI.el("h3", null, "Stop-level data"));
-
-    var headBar = GuiUI.el("div", "gui-actions");
-    var saveHead = GuiUI.el("button", "gui-btn gui-btn-primary",
-      isNew ? "Save stop-level data" : "Save changes");
-
-    headBar.appendChild(saveHead);
 
     if (!isNew) {
       var del = GuiUI.el("button", "gui-btn gui-btn-danger", "Delete");
@@ -203,7 +260,7 @@
 
           return GuiApi.del("/point_counts/" + row.point_count_id)
             .then(function () {
-              m.close();
+              m.close(true);
               GuiUI.status("Point count deleted.", "ok");
               return loadCounts();
             })
@@ -213,166 +270,161 @@
             });
         });
       });
-      headBar.appendChild(del);
+      head.appendChild(del);
     }
-
-    head.appendChild(headBar);
     m.body.appendChild(head);
 
     var f = GuiUI.form(countFields(state.lk),
       row || { count_date: todayIso() }, "pc_hdr_");
 
+    f.el.addEventListener("change", function () { dirty = true; });
     m.body.appendChild(f.el);
 
-    saveHead.addEventListener("click", function () {
-      saveHead.disabled = true;
+    // -- three interval grids ----------------------------------------------
+
+    var gridHosts = {};
+
+    INTERVALS.forEach(function (i) {
+      var panel = GuiUI.el("div", "gui-subpanel");
+
+      panel.appendChild(GuiUI.el("h3", null, "Interval " + i));
+      gridHosts[i] = GuiUI.el("div");
+      panel.appendChild(gridHosts[i]);
+      m.body.appendChild(panel);
+    });
+
+    function buildGrids(byInterval) {
+      INTERVALS.forEach(function (i) {
+        gridHosts[i].innerHTML = "";
+        grids[i] = GuiUI.grid(gridCols(), byInterval[i] || []);
+        grids[i].onChange(function () { dirty = true; });
+        gridHosts[i].appendChild(grids[i].el);
+      });
+      dirty = false;
+    }
+
+    function loadGrids() {
+      if (isNew) {
+        buildGrids({});
+        return Promise.resolve();
+      }
+      return GuiApi.get(
+        "/point_counts/" + row.point_count_id + "/intervals"
+      ).then(function (r) {
+        buildGrids(toGrids(r));
+      }).catch(function (e) {
+        GuiUI.status("Could not load counts: " + e.message, "err");
+        if (window.console) console.error(e);
+      });
+    }
+
+    // -- ONE save for everything -------------------------------------------
+
+    // The final validation the sheet's data validation would do: no blank
+    // stop-level field; every count row needs a valid species and Det.
+
+    function problems() {
+      var out = [];
+      var header = f.read();
+
+      HEADER_FIELDS.forEach(function (fd) {
+        var v = header[fd.key];
+
+        if (v === null || v === undefined || v === "") {
+          out.push("Stop-level: " + fd.label + " is blank.");
+        }
+      });
+
+      INTERVALS.forEach(function (i) {
+        var bad = 0;
+        var empty = 0;
+
+        grids[i].rows().forEach(function (r) {
+          var sp = String(r.species || "").toUpperCase();
+          var det = String(r.detection || "").toUpperCase();
+
+          if (!sp || state.speciesSet[sp] !== true ||
+              !det || DETECTIONS.indexOf(det) === -1) {
+            bad += 1;
+            return;
+          }
+
+          // A row with no count in any distance bin pivots to nothing and
+          // would silently vanish -- refuse it instead.
+
+          var any = DIST.some(function (d) {
+            var n = r[d.key];
+            return n !== null && n !== undefined && n !== "" &&
+              Number(n) > 0;
+          });
+
+          if (!any) empty += 1;
+        });
+        if (bad > 0) {
+          out.push("Interval " + i + ": " + bad +
+            " row(s) with a missing or invalid species / Det.");
+        }
+        if (empty > 0) {
+          out.push("Interval " + i + ": " + empty +
+            " row(s) with no count in any distance column.");
+        }
+      });
+      return out;
+    }
+
+    function saveAll() {
+      var probs = problems();
+
+      if (probs.length) {
+        GuiUI.status("Not saved — " + probs.join(" "), "err");
+        return;
+      }
+
       GuiUI.status("Saving…", "busy");
 
-      var save = isNew
+      var saveHeader = isNew
         ? GuiApi.post("/point_counts", f.read())
         : GuiApi.patch("/point_counts/" + row.point_count_id, f.read());
 
-      save.then(function (created) {
-        GuiUI.status("Stop-level data saved.", "ok");
-
+      saveHeader.then(function (created) {
         if (isNew && created && created.point_count_id) {
           row = created;
           isNew = false;
-          saveHead.textContent = "Save changes";
-          unlockGrid();
         }
-        return loadCounts();
-      }).catch(function (e) {
-        GuiUI.status("Save failed: " + e.message, "err");
-        if (window.console) console.error(e);
-      }).then(function () {
-        saveHead.disabled = false;
-      });
-    });
 
-    // -- counts -------------------------------------------------------------
+        var rows = [];
 
-    var countsPanel = GuiUI.el("div", "gui-subpanel");
-    var chead = GuiUI.el("div", "gui-page-head");
-    var rowCount = GuiUI.el("span", "gui-rowcount", "");
-    var saveGridBtn = GuiUI.el("button", "gui-btn gui-btn-primary",
-      "Save counts");
-    var cActions = GuiUI.el("div", "gui-actions");
-    var gridHost = GuiUI.el("div");
-    var grid = null;
-
-    cActions.appendChild(rowCount);
-    cActions.appendChild(saveGridBtn);
-    chead.appendChild(GuiUI.el("h3", null, "Counts"));
-    chead.appendChild(cActions);
-    countsPanel.appendChild(chead);
-    countsPanel.appendChild(gridHost);
-    m.body.appendChild(countsPanel);
-
-    function gridCols(lk) {
-      var cols = [
-        {
-          key: "interval",
-          label: "Int",
-          type: "select",
-          width: "4.5em",
-          options: [
-            { value: "", label: "" }, { value: "1", label: "1" },
-            { value: "2", label: "2" }, { value: "3", label: "3" }
-          ]
-        },
-        {
-          key: "species", label: "Species", type: "datalist",
-          listId: "pcSpecies", width: "7em", uppercase: true
-        }
-      ];
-
-      DIST.forEach(function (d) {
-        cols.push({
-          key: d.key, label: d.label, type: "number", width: "4.5em"
+        INTERVALS.forEach(function (i) {
+          rows = rows.concat(toApi(grids[i].rows(), row.point_count_id, i));
         });
-      });
 
-      cols.push({
-        key: "detection",
-        label: "Det",
-        type: "select",
-        width: "4.5em",
-        options: [{ value: "", label: "" }].concat(
-          (lk.count_detections || ["A", "V", "B"]).map(function (d) {
-            return { value: d, label: d };
-          })
-        )
-      });
-      return cols;
-    }
-
-    function loadGrid() {
-      return GuiApi.get("/point_counts/" + row.point_count_id + "/intervals")
-        .then(function (r) {
-          var rows = toGrid(r);
-
-          gridHost.innerHTML = "";
-          grid = GuiUI.grid(gridCols(state.lk), rows,
-            { inherit: ["interval"] });
-          grid.onChange(function () { dirty = true; });
-          gridHost.appendChild(grid.el);
-          rowCount.textContent = rows.length + " rows";
-          dirty = false;
-        }).catch(function (e) {
-          GuiUI.status("Could not load counts: " + e.message, "err");
-          if (window.console) console.error(e);
-        });
-    }
-
-    function unlockGrid() {
-      gridHost.innerHTML = "";
-      loadGrid();
-    }
-
-    function saveGridNow() {
-      if (!grid || !row) {
-        GuiUI.status("Save the stop-level data first.", "err");
-        return;
-      }
-
-      var bad = grid.rows().filter(function (r) {
-        return !r.interval || !r.species || !r.detection;
-      });
-
-      if (bad.length) {
-        GuiUI.status(
-          bad.length + " row(s) need interval, species and detection.",
-          "err"
+        return GuiApi.post(
+          "/point_counts/" + row.point_count_id + "/intervals",
+          { rows: rows }
         );
-        return;
-      }
-
-      var body = { rows: toApi(grid.rows(), row.point_count_id) };
-
-      GuiUI.status("Saving " + body.rows.length + " count rows…", "busy");
-
-      GuiApi.post(
-        "/point_counts/" + row.point_count_id + "/intervals", body
-      ).then(function () {
-        GuiUI.status("Counts saved.", "ok");
+      }).then(function () {
         dirty = false;
-        return loadGrid();
+        return loadCounts().then(loadGrids);
+      }).then(function () {
+        GuiUI.status("Point count saved.", "ok");
       }).catch(function (e) {
         GuiUI.status("Save failed: " + e.message, "err");
         if (window.console) console.error(e);
       });
     }
 
-    saveGridBtn.addEventListener("click", saveGridNow);
+    var bar = GuiUI.el("div", "gui-actions");
+    var save = GuiUI.el("button", "gui-btn gui-btn-primary",
+      "Save point count");
+    var cancel = GuiUI.el("button", "gui-btn", "Close");
 
-    if (isNew) {
-      gridHost.appendChild(GuiUI.el("p", "gui-empty",
-        "Save the stop-level data first — the counts attach to it."));
-    } else {
-      loadGrid();
-    }
+    save.addEventListener("click", saveAll);
+    cancel.addEventListener("click", function () { m.close(); });
+    bar.appendChild(save);
+    bar.appendChild(cancel);
+    m.body.appendChild(bar);
 
+    loadGrids();
     f.focus();
   }
 
@@ -410,8 +462,8 @@
       GuiApi.lookups().then(function (lk) {
         state.lk = lk;
 
-        // 198 species: type-ahead, never a dropdown. Fall back to the nest
-        // species list if species_engine is not populated yet.
+        // The validation list AND the type-ahead: species_engine, falling
+        // back to the nest species list if the engine is not populated.
 
         var engine = (lk.species_engine && lk.species_engine.length)
           ? lk.species_engine.map(function (s) {
@@ -420,6 +472,11 @@
           : (lk.species || []).map(function (s) {
               return { value: s.species_code, label: s.common_name };
             });
+
+        state.speciesSet = {};
+        engine.forEach(function (s) {
+          state.speciesSet[String(s.value).toUpperCase()] = true;
+        });
 
         host.appendChild(GuiUI.datalist("pcSpecies", engine));
         add.addEventListener("click", function () { openCount(null); });

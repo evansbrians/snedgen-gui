@@ -274,8 +274,45 @@ select.gui-cell {
 /* Tighten the cells' padding while a row is editing so inputs sit flush,
    like a selected spreadsheet row. */
 
-.gui-row-editing td,
-.gui-grid td { padding: 2px 3px; }
+.gui-row-editing td { padding: 2px 3px; }
+
+/* The live grid IS a spreadsheet: cells flush against each other, shared
+   1px gridlines, the input filling its cell edge-to-edge. */
+
+.gui-grid { border-collapse: collapse; }
+
+.gui-grid td {
+  padding: 0;
+  border: 1px solid var(--gui-cell-border);
+}
+
+.gui-grid td.gui-row-actions { border: none; padding: 0 4px; }
+
+.gui-grid .gui-cell {
+  border: none;
+  height: 28px;
+  min-width: 3.5em;
+  display: block;
+}
+
+.gui-grid .gui-cell:focus {
+  outline: 2px solid var(--gui-accent);
+  outline-offset: -2px;
+  position: relative;
+  z-index: 1;
+}
+
+/* A value that fails the cell's validation flags red, spreadsheet-style. */
+
+.gui-cell-invalid {
+  background: #f6c8c4 !important;
+  color: #7a1710 !important;
+}
+
+[data-theme="dark"] .gui-cell-invalid {
+  background: #5c2320 !important;
+  color: #ffb4ab !important;
+}
 
 .gui-actions {
   display: flex;
