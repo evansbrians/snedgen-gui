@@ -27,7 +27,8 @@
     "Coverboards",
     "Trail Cameras",
     "Point Counts",
-    "Nests"
+    "Nests",
+    "Landmarks"
   ];
 
   var state = {
@@ -62,6 +63,7 @@
     if (cls === "coverboard") return "Coverboards";
     if (cls === "trailcam") return "Trail Cameras";
     if (cls === "point_count") return "Point Counts";
+    if (cls === "landmark") return "Landmarks";
     return null;
   }
 
@@ -155,6 +157,11 @@
   function rowOpacity(row) {
     var o = 1;
 
+    // Reviewing artificial candidates: every nest shown reads at full
+    // strength, no fades.
+
+    if (state.options.artOnly && row.class === "nest") return 1;
+
     if (Number(row.is_current) === 0) o = Math.min(o, 0.5);
     if (state.options.today && Number(row.scheduled_today) === 0 &&
         (row.class === "nest" || row.class === "coverboard" ||
@@ -226,11 +233,15 @@
       if (!rowVisible(row)) return;
 
       // "Artificial candidates" option: nests thin down to candidates
-      // only; the other classes stay put.
+      // only -- and a currently-active NQ nest is already placed, so it
+      // drops out too. The other classes stay put.
 
-      if (state.options.artOnly && row.class === "nest" &&
-          Number(row.artificial_candidate) !== 1) {
-        return;
+      if (state.options.artOnly && row.class === "nest") {
+        if (Number(row.artificial_candidate) !== 1) return;
+        if (/^NQ/.test(String(row.name || "")) &&
+            Number(row.is_current) !== 0) {
+          return;
+        }
       }
 
       var icon = leafletIcon(row, zs);
@@ -549,9 +560,14 @@
       state.map.hasLayer(state.overlays.Paths),
       function (on) { setGroup("Paths", on); });
 
+    var trow = null;   // the track-name dropdown, visible only while ON
+
     toggle(box, "Show search tracks",
       state.map.hasLayer(state.overlays["Search tracks"]),
-      function (on) { setGroup("Search tracks", on); });
+      function (on) {
+        setGroup("Search tracks", on);
+        if (trow) trow.style.display = on ? "" : "none";
+      });
 
     toggle(box, "Artificial candidates", !!state.options.artOnly,
       function (on) {
@@ -580,17 +596,28 @@
 
     m.body.appendChild(box);
 
-    // Subset the search tracks by name (shown when any tracks exist).
+    // Subset the search tracks by name -- only offered while "Show search
+    // tracks" is on, and only listing tracks in the selected patch.
 
     if ((state.tracks || []).length) {
-      var trow = GuiUI.el("div", "gui-field");
+      trow = GuiUI.el("div", "gui-field");
+
       var tlab = GuiUI.el("label", "gui-label", "Search track");
       var tsel = GuiUI.el("select", "gui-input");
       var allo = GuiUI.el("option", null, "All tracks");
 
       allo.value = "__all__";
       tsel.appendChild(allo);
-      state.tracks.forEach(function (t) {
+      state.tracks.filter(function (t) {
+        if (state.options.patch === "__all__") return true;
+
+        var pts = (t.points || []).map(function (p) {
+          return [p.lat, p.lng];
+        });
+
+        return t.patch_id === state.options.patch ||
+          anyVertexInPatch([pts], state.options.patch);
+      }).forEach(function (t) {
         var o = GuiUI.el("option", null,
           (t.name || t.track_id) +
           (t.patch_id ? " (" + pretty(t.patch_id) + ")" : ""));
@@ -599,14 +626,13 @@
         tsel.appendChild(o);
       });
       tsel.value = state.options.track || "__all__";
+      if (tsel.selectedIndex < 0) tsel.value = "__all__";
       tsel.addEventListener("change", function () {
         state.options.track = tsel.value;
-
-        // Picking a specific track implies wanting to SEE it.
-
-        if (tsel.value !== "__all__") setGroup("Search tracks", true);
         drawTracks();
       });
+      trow.style.display =
+        state.map.hasLayer(state.overlays["Search tracks"]) ? "" : "none";
       trow.appendChild(tlab);
       trow.appendChild(tsel);
       m.body.appendChild(trow);
@@ -789,7 +815,8 @@
           Coverboards: state.overlays.Coverboards,
           "Trail Cameras": state.overlays["Trail Cameras"],
           "Point Counts": state.overlays["Point Counts"],
-          Nests: state.overlays.Nests
+          Nests: state.overlays.Nests,
+          Landmarks: state.overlays.Landmarks
         },
         { collapsed: true }
       ).addTo(state.map);

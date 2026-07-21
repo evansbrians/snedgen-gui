@@ -68,10 +68,10 @@
     var art = rows.filter(isArtificial);
 
     var items = [
-      ["Non-artificial nests", nonArt.length],
+      ["Nests found", nonArt.length],
       ["Artificial nests", art.length],
-      ["Identified nests", nonArt.filter(hasEggOrYoung).length],
-      ["Current non-artificial nests", nonArt.filter(isCurrent).length],
+      ["Nests with interval data", nonArt.filter(hasEggOrYoung).length],
+      ["Current natural nests", nonArt.filter(isCurrent).length],
       ["Current artificial nests", art.filter(isCurrent).length]
     ];
 
