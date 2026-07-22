@@ -29,6 +29,10 @@
   var DETECTIONS = ["A", "V", "B"];
 
   var state = { counts: [], lk: null, speciesSet: {} };
+
+  // <datalist> id for the species type-ahead, built once from species_engine so
+  // techs pick a species (by name or code) instead of typing a code from memory.
+  var SPECIES_LIST = "gui-pc-species";
   var refs = {};
 
   // ---- wide <-> long -------------------------------------------------------
@@ -176,7 +180,8 @@
       {
         key: "species",
         label: "Species",
-        type: "text",
+        type: "datalist",
+        listId: SPECIES_LIST,
         width: "7em",
         uppercase: true,
         validate: function (v) {
@@ -344,18 +349,19 @@
       }
 
       INTERVALS.forEach(function (i) {
-        var bad = 0;
+        var badSpecies = 0;
+        var badDet = 0;
         var empty = 0;
 
         grids[i].rows().forEach(function (r) {
           var sp = String(r.species || "").toUpperCase();
           var det = String(r.detection || "").toUpperCase();
+          var spOk = sp && state.speciesSet[sp] === true;
+          var detOk = det && DETECTIONS.indexOf(det) !== -1;
 
-          if (!sp || state.speciesSet[sp] !== true ||
-              !det || DETECTIONS.indexOf(det) === -1) {
-            bad += 1;
-            return;
-          }
+          if (!spOk) badSpecies += 1;
+          if (!detOk) badDet += 1;
+          if (!spOk || !detOk) return;
 
           // A row with no count in any distance bin pivots to nothing and
           // would silently vanish -- refuse it instead.
@@ -368,9 +374,13 @@
 
           if (!any) empty += 1;
         });
-        if (bad > 0) {
-          out.push("Interval " + i + ": " + bad +
-            " row(s) with a missing or invalid species / Det.");
+        if (badSpecies > 0) {
+          out.push("Interval " + i + ": " + badSpecies +
+            " row(s) with a missing or invalid Species.");
+        }
+        if (badDet > 0) {
+          out.push("Interval " + i + ": " + badDet +
+            " row(s) with a missing or invalid Det (must be A, V, or B).");
         }
         if (empty > 0) {
           out.push("Interval " + i + ": " + empty +
@@ -381,10 +391,14 @@
     }
 
     function saveAll() {
+      errEl.textContent = "";
+      errEl.style.display = "none";
+
       var probs = problems();
 
       if (probs.length) {
-        GuiUI.status("Not saved — " + probs.join(" "), "err");
+        errEl.textContent = "Not saved. " + probs.join("  ");
+        errEl.style.display = "";
         return;
       }
 
@@ -417,10 +431,21 @@
       }).then(function () {
         GuiUI.status("Point count saved.", "ok");
       }).catch(function (e) {
-        GuiUI.status("Save failed: " + e.message, "err");
+        errEl.textContent = "Save failed: " + e.message;
+        errEl.style.display = "";
         if (window.console) console.error(e);
       });
     }
+
+    // Validation / save errors show right here, inside the modal by the Save
+    // button -- the global status bar sits behind the modal and gets clipped.
+    var errEl = GuiUI.el("div", "gui-modal-error");
+    errEl.setAttribute("role", "alert");
+    errEl.style.display = "none";
+    errEl.style.color = "#b00020";
+    errEl.style.margin = "8px 0 0";
+    errEl.style.fontWeight = "600";
+    m.body.appendChild(errEl);
 
     var bar = GuiUI.el("div", "gui-actions");
     var save = GuiUI.el("button", "gui-btn gui-btn-primary",
@@ -486,6 +511,10 @@
         engine.forEach(function (s) {
           state.speciesSet[String(s.value).toUpperCase()] = true;
         });
+
+        if (!document.getElementById(SPECIES_LIST)) {
+          document.body.appendChild(GuiUI.datalist(SPECIES_LIST, engine));
+        }
 
         add.addEventListener("click", function () { openCount(null); });
         return loadCounts();

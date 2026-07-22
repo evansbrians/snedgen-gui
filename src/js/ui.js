@@ -897,6 +897,7 @@
       var op = el("option");
       op.value = o.value;
       op.label = o.label;
+      op.textContent = o.label;   // shown + filtered by name in Chrome/Edge
       dl.appendChild(op);
     });
     return dl;
