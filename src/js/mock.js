@@ -36,11 +36,6 @@
         { species_code: "AMRO", species_name: "American Robin" },
         { species_code: "CACH", species_name: "Carolina Chickadee" }
       ],
-      coverboard_species: [
-        { species: "DEFU", label: "Northern Dusky Salamander" },
-        { species: "PLCI", label: "Slimy Salamander" },
-        { species: "THSI", label: "Common Gartersnake" }
-      ],
       count_distances: ["< 25 m", "25-50 m", "50-75 m", "75-100 m", "> 100 m"],
       count_detections: ["A", "V", "B"],
       substrates: [
@@ -60,25 +55,6 @@
       point_classes: ["Nest", "Landmark", "point_count", "coverboard"]
     },
 
-    coverboard_checks: [
-      {
-        coverboard_check_id: 1, patch_id: "coyote", board_num: 3,
-        check_date: "2026-07-14", check_time: "09:15", observer_id: "TNS",
-        notes: "Damp under board."
-      },
-      {
-        coverboard_check_id: 2, patch_id: "leech", board_num: 1,
-        check_date: "2026-07-14", check_time: "10:40", observer_id: "BSE",
-        notes: null
-      }
-    ],
-    coverboard_obs: [
-      { obs_id: 1, coverboard_check_id: 1, species: "DEFU", count: 2,
-        photo_id: null, notes: null },
-      { obs_id: 2, coverboard_check_id: 1, species: "THSI", count: 1,
-        photo_id: null, notes: "Juvenile." }
-    ],
-
     point_counts: [
       {
         point_count_id: 1, observer_id: "TNS", patch_id: "forest_geo",
@@ -91,8 +67,6 @@
       { count_interval_id: 2, point_count_id: 1, interval: 2,
         species: "NOCA", distance: "< 25 m", detection: "B", count: 1 }
     ],
-
-    visits: buildVisits(),
 
     predator_cameras: [
       { camera_id: "coyote_trailcam_1", patch_id: "coyote",
@@ -174,24 +148,6 @@
 
     schedule_days: buildSchedule()
   };
-
-  // Visits land in the current week so the week view has rows to show.
-
-  function buildVisits() {
-    var today = new Date();
-    var yest = new Date(
-      today.getFullYear(), today.getMonth(), today.getDate() - 1
-    );
-
-    return [
-      { visit_id: 1, visit_date: isoOf(today), patch_id: "coyote",
-        helper: "JMR", activity: "Nest search", status: "Complete",
-        notes: null },
-      { visit_id: 2, visit_date: isoOf(yest), patch_id: "witch_hazel",
-        helper: "-", activity: "Coverboard check", status: "Partial",
-        notes: "Rain stopped us at board 4." }
-    ];
-  }
 
   // /map_points rows, mirroring v_map_point's shape (icon / fades / size).
 
@@ -412,32 +368,6 @@
       ];
     }
 
-    if (head === "coverboard_checks") {
-      if (sub === "obs") {
-        if (method === "GET") {
-          return db.coverboard_obs.filter(function (o) {
-            return String(o.coverboard_check_id) === String(id);
-          });
-        }
-        if (method === "POST") {
-          var o = merge(
-            { obs_id: nextId++, coverboard_check_id: Number(id) }, body
-          );
-
-          db.coverboard_obs.push(o);
-          return o;
-        }
-      }
-      return collection("coverboard_checks", "coverboard_check_id", method,
-        id, body, p, function () {
-          removeFrom("coverboard_obs", "coverboard_check_id", id);
-        });
-    }
-
-    if (head === "coverboard_obs") {
-      return collection("coverboard_obs", "obs_id", method, id, body, p);
-    }
-
     if (head === "point_counts") {
       if (sub === "intervals") {
         if (method === "GET") {
@@ -466,10 +396,6 @@
     if (head === "count_intervals") {
       return collection("count_intervals", "count_interval_id", method, id,
         body, p);
-    }
-
-    if (head === "visits") {
-      return collection("visits", "visit_id", method, id, body, p);
     }
 
     if (head === "predator_cameras") {

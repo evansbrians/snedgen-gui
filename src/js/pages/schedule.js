@@ -474,8 +474,11 @@
   function dayBodyHtml(rows) {
     var r = rows[0];
 
+    // Helper used to repeat here as the first line -- now shown once, in
+    // the (always-visible) accordion button, so it doesn't have to be
+    // expanded just to see who's helping that day.
+
     return (
-      "<p><em>Helper: " + esc(dashV(r.helper)) + "</em></p>" +
       morningTable(r) +
       "<p><strong>Point count times, coverboards, and nests to check:" +
       "</strong></p>" +
@@ -548,6 +551,20 @@
     }
   }
 
+  // Each day is a collapsed-by-default accordion (matching the field app's
+  // own accordion pattern, which this page otherwise deliberately skips --
+  // see the module comment at the top of this file). The whole head row is
+  // the toggle button; Day + date, the Field-day checkbox, and the Helper
+  // name all live IN that row so they're visible without expanding anything
+  // -- only the tables/notes/weather (dayBodyHtml) are behind the toggle.
+  // The Field-day checkbox and the Edit/Plan button are still exactly the
+  // same controls as before (same handlers, same disabled rules) -- they
+  // just stopPropagation() so clicking them doesn't also fire the
+  // expand/collapse toggle. Editing a day has NOT been removed: it's the
+  // same "Edit day" / "Plan this day" button, now sitting in the
+  // always-visible accordion head instead of a header that was always
+  // expanded.
+
   function dayCard(date, dayName) {
     var dateStr = iso(date);
     var ownRows = rowsFor(dateStr);           // this date's stored rows
@@ -555,8 +572,13 @@
     var field = isFieldDay(ownRows);
     var past = dateStr < iso(new Date());
     var card = GuiUI.el("div", "gui-card gui-day-card");
-    var head = GuiUI.el("div", "gui-day-head");
+    var head = GuiUI.el("div", "gui-day-head gui-accordion-head");
+    var bodyWrap = GuiUI.el("div", "gui-accordion-body");
+    var caret = GuiUI.el("span", "gui-accordion-caret", "▸");
 
+    bodyWrap.style.display = "none"; // closed by default
+
+    head.appendChild(caret);
     head.appendChild(
       GuiUI.el("h3", "gui-day-title", dayName + " · " + shortDate(date))
     );
@@ -573,12 +595,24 @@
     cb.disabled = !ownRows.length || past;
     toggle.appendChild(cb);
     toggle.appendChild(GuiUI.el("span", null, "Field day"));
+    toggle.addEventListener("click", function (e) { e.stopPropagation(); });
     head.appendChild(toggle);
 
     if (ownRows.length && !field) {
       head.appendChild(
         GuiUI.el("span", "gui-day-badge gui-day-badge-weather", "Weather day")
       );
+    }
+
+    // Helper preview: the one line from the day body worth seeing without
+    // expanding -- who's helping, at a glance, across the whole week.
+
+    var leadRow = dispRows[0];
+
+    if (leadRow && isVal(leadRow.helper)) {
+      head.appendChild(GuiUI.el(
+        "span", "gui-day-helper-preview", "Helper: " + dashV(leadRow.helper)
+      ));
     }
 
     cb.addEventListener("change", function () {
@@ -600,6 +634,7 @@
       var edit = GuiUI.el("button", "gui-btn",
         dispRows.length ? "Edit day" : "Plan this day");
 
+      actions.addEventListener("click", function (e) { e.stopPropagation(); });
       edit.addEventListener("click", function () {
         editDay(dateStr, ownRows, dispRows);
       });
@@ -607,10 +642,29 @@
       head.appendChild(actions);
     }
 
+    function setOpen(open) {
+      bodyWrap.style.display = open ? "" : "none";
+      caret.textContent = open ? "▾" : "▸";
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    head.setAttribute("role", "button");
+    head.setAttribute("aria-expanded", "false");
+    head.tabIndex = 0;
+    head.addEventListener("click", function () {
+      setOpen(bodyWrap.style.display === "none");
+    });
+    head.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        setOpen(bodyWrap.style.display === "none");
+      }
+    });
+
     card.appendChild(head);
 
     if (!dispRows.length) {
-      card.appendChild(
+      bodyWrap.appendChild(
         GuiUI.el(
           "p",
           "gui-empty",
@@ -619,13 +673,15 @@
             : "Nothing scheduled."
         )
       );
+      card.appendChild(bodyWrap);
       return card;
     }
 
     var bodyHost = GuiUI.el("div", "gui-day-body");
 
     bodyHost.innerHTML = dayBodyHtml(dispRows);
-    card.appendChild(bodyHost);
+    bodyWrap.appendChild(bodyHost);
+    card.appendChild(bodyWrap);
     return card;
   }
 
@@ -832,14 +888,7 @@
     ].concat(optionsFrom(lk.patches, "patch_id", "label"));
   }
 
-  // Lookup lists arrive as arrays of objects; tolerate a plain string array.
-
-  function optionsFrom(list, valueKey, labelKey) {
-    return (list || []).map(function (item) {
-      if (typeof item === "string") return { value: item, label: item };
-      return { value: item[valueKey], label: item[labelKey] || item[valueKey] };
-    });
-  }
+  var optionsFrom = GuiUI.optionsFrom;
 
   // ---- mount ---------------------------------------------------------------
 

@@ -81,6 +81,18 @@
   }
 
   function route() {
+    // A modal (Add nest, Point Count, ...) used to survive a hash-nav to a
+    // different tab: it kept floating over the newly-shown page, fully
+    // interactive, blocking the content underneath -- reads as "the app
+    // is stuck" (reproduced independently by two reviewers). Nothing
+    // clears open modals on a route change, so this does it here, once,
+    // for every page rather than each page guarding its own modals.
+    // Deliberately a FORCED close (bypasses any beforeClose "unsaved
+    // changes?" guard): the alternative -- leaving a popup open across a
+    // route the user explicitly navigated to -- is the worse failure
+    // mode of the two.
+
+    GuiUI.closeAllModals();
     show((location.hash || "").replace(/^#/, ""));
   }
 
@@ -114,6 +126,41 @@
       close();
     });
     return false;
+  }
+
+  // A 401 mid-session (a stale/expired token, not the first-load case
+  // tokenGate() already handles) re-shows the SAME gate div rather than a
+  // new one -- but always reloads on save rather than trying to resume
+  // whatever the page was mid-request, since a page that just got a 401
+  // may be holding half-loaded state. Guarded against wiring its Save
+  // button twice if more than one in-flight request 401s before the
+  // reload happens.
+
+  function reopenGateForExpiry() {
+    var gate = document.getElementById("guiTokenGate");
+    var input = document.getElementById("guiTokenInput");
+    var save = document.getElementById("guiTokenSave");
+    var intro = gate.querySelector("p");
+
+    gate.style.display = "";
+    if (intro) {
+      intro.textContent = "Your session token was rejected — paste a new " +
+        "one to continue. The page reloads after saving.";
+    }
+
+    if (gate.dataset.expiryWired) return;
+    gate.dataset.expiryWired = "1";
+
+    save.addEventListener("click", function () {
+      var t = (input.value || "").trim();
+
+      if (!t) {
+        GuiUI.status("Paste your API token first.", "err");
+        return;
+      }
+      GuiApi.setToken(t);
+      location.reload();
+    });
   }
 
   // The ⚙ API button in the header: always reachable, so a stale stored
@@ -221,6 +268,14 @@
 
     if (settings) settings.addEventListener("click", apiSettings);
     themeToggle();
+
+    // ONE registration covers every page's request, present and future --
+    // see api.js's onUnauthorized. Previously only boot()'s own initial
+    // /lookups call actually reopened anything on a 401; every page-level
+    // catch just printed an error and stopped.
+
+    GuiApi.onUnauthorized(reopenGateForExpiry);
+
     if (tokenGate()) boot();
   });
 })();

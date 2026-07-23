@@ -130,6 +130,43 @@ body {
 .gui-status-err { color: var(--gui-danger); font-weight: 600; }
 .gui-status-busy { color: var(--gui-busy); }
 
+/* Toast: same message as the status bar, but rides ABOVE the modal
+   backdrop (z-index 5000) so a save made from inside a popup is never
+   invisible. Auto-dismisses; see GuiUI.toast in ui.js. */
+
+.gui-toast-host {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.gui-toast {
+  background: var(--gui-panel);
+  color: var(--gui-fg);
+  border: 1px solid var(--gui-line);
+  border-left: 4px solid var(--gui-muted);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.25);
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.gui-toast.is-in { opacity: 1; transform: none; }
+
+.gui-toast-ok { border-left-color: var(--gui-ok); color: var(--gui-ok); }
+.gui-toast-err { border-left-color: var(--gui-danger); color: var(--gui-danger); }
+
 /* layout */
 
 .gui-main {
@@ -159,8 +196,18 @@ body {
 }
 
 .gui-scroll .gui-table-wrap {
-  flex: 1;
-  min-height: 0;
+  /* flex-grow: 0 -- a table with only one or two rows (Point counts,
+     Cameras early in a season) used to stretch to fill the ENTIRE
+     remaining page height because this box always grew to fill leftover
+     flex space, leaving 600+ px of blank panel below a single row with
+     no visual anchor -- read as a broken/unfinished page. flex-basis:
+     auto sizes the box to its actual content first; flex-shrink: 1 (the
+     default) still lets it shrink and scroll internally once a real
+     season's data no longer fits, so nothing regresses for a full table.
+     max-height caps it at the available space either way. */
+
+  flex: 0 1 auto;
+  max-height: 100%;
   overflow: auto;
 }
 
@@ -203,7 +250,46 @@ body {
   border: 1px solid var(--gui-line);
   border-radius: var(--gui-radius);
   box-shadow: var(--gui-shadow);
+  position: relative;
+
+  /* Horizontal-scroll affordance: a table wider than its wrap used to
+     scroll with NO visible cue that there was more to the right --
+     several platforms (macOS in particular) hide overlay scrollbars
+     until you're actively scrolling. Declaring custom scrollbar styling
+     opts back into an always-visible, clearly-a-scrollbar bar the moment
+     content overflows, and the ID column is frozen (below) so the row's
+     identifier never scrolls out of view even before you notice the
+     bar. */
+
+  scrollbar-width: auto;
+  scrollbar-color: var(--gui-muted) var(--gui-th-bg);
 }
+
+.gui-table-wrap::-webkit-scrollbar { height: 12px; }
+
+.gui-table-wrap::-webkit-scrollbar-track { background: var(--gui-th-bg); }
+
+.gui-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--gui-muted);
+  border-radius: 6px;
+  border: 2px solid var(--gui-th-bg);
+}
+
+/* The first column (the row's primary key -- nest id, point name, camera
+   id) stays put while the rest of a wide table scrolls underneath it, so
+   the identifier is never the thing that scrolls out of view. */
+
+.gui-table th:first-child, .gui-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--gui-panel);
+}
+
+.gui-table thead th:first-child { z-index: 3; background: var(--gui-th-bg); }
+
+.gui-row-click:hover td:first-child { background: var(--gui-accent-soft); }
+.gui-row-editing td:first-child { background: var(--gui-edit-bg); }
 
 .gui-table {
   width: 100%;
@@ -220,12 +306,43 @@ body {
 
 .gui-table tbody tr:last-child td { border-bottom: none; }
 
+/* Free-text columns (notes, location descriptions, ...) are the thing that
+   was actually forcing the horizontal scroll on most tables -- one long
+   note turns an otherwise page-width table into one that overflows. These
+   columns opt out of the default nowrap and wrap instead, with a max-width
+   so a single cell can't keep growing the column to fit its longest line;
+   the rest of the table keeps its normal (short, single-line) columns. */
+
+.gui-table th.gui-td-wrap, .gui-table td.gui-td-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 280px;
+  min-width: 160px;
+}
+
 .gui-table th {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--gui-muted);
   background: var(--gui-th-bg);
+}
+
+/* Sortable column headers -- no hover affordance existed on any table
+   before, so a real season's worth of data had no way to sort or find a
+   row without scrolling past it. */
+
+.gui-th-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.gui-th-sortable:hover { color: var(--gui-fg); }
+
+.gui-sort-arrow {
+  color: var(--gui-accent);
+  font-size: 10px;
 }
 
 /* clickable rows */
@@ -383,15 +500,46 @@ input.gui-cell[type="number"] {
 
 .gui-switch-inline input { width: 16px; height: 16px; }
 
-/* Summary tab. */
+/* Summary tab -- stat tiles, matching the card/table visual weight of
+   every other tab instead of a plain bullet list (it was the one page
+   that looked unfinished, and it's the first thing anyone sees). */
 
-.gui-summary-list {
+.gui-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
   margin: 4px 0;
-  padding-left: 22px;
-  line-height: 2;
 }
 
-.gui-summary-list strong { font-size: 16px; }
+.gui-stat-tile {
+  background: var(--gui-panel);
+  border: 1px solid var(--gui-line);
+  border-left: 4px solid var(--gui-accent);
+  border-radius: var(--gui-radius);
+  box-shadow: var(--gui-shadow);
+  padding: 14px 16px;
+}
+
+.gui-stat-tile.gui-stat-sub { border-left-color: var(--gui-muted); }
+
+.gui-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.gui-stat-label {
+  color: var(--gui-muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.gui-stat-hint {
+  color: var(--gui-muted);
+  font-size: 12px;
+  font-style: italic;
+  margin: 2px 0 12px;
+}
 
 /* Species info tab (the app's species-table, restyled to the GUI). */
 
@@ -454,6 +602,22 @@ input.gui-cell[type="number"] {
   color: #ffb4ab !important;
 }
 
+/* A select whose stored value isn't in the current lookup list (schema
+   drift) -- flagged instead of silently defaulting to the first option. */
+
+.gui-input-stale {
+  border-color: var(--gui-busy) !important;
+  background: var(--gui-warn-soft);
+}
+
+/* A number field outside its "does this look right" range (e.g. a nest
+   height of 99m) -- a soft warning, not a hard block. */
+
+.gui-input-warn {
+  border-color: var(--gui-busy) !important;
+  background: var(--gui-warn-soft);
+}
+
 .gui-actions {
   display: flex;
   gap: 8px;
@@ -488,6 +652,30 @@ input.gui-cell[type="number"] {
 
 .gui-btn-danger { color: var(--gui-danger); border-color: #f0c8c4; }
 .gui-btn-danger:hover { background: var(--gui-danger-soft); }
+
+/* Two intentional danger-button languages, not an accidental third one:
+   a worded "Delete" stays the outlined rectangular button above (used at
+   modal/record level, where a mis-click is costly and a label matters);
+   an icon-only "x" (removing one row from a grid, or one row from a
+   table's row-actions column -- a cheap, reversible-before-save action)
+   is a small filled circle instead, so it reads as its own deliberate,
+   consistent control rather than a smaller copy of the same button. */
+
+.gui-btn-x {
+  background: var(--gui-danger);
+  color: #fff;
+  border-color: var(--gui-danger);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gui-btn-x:hover { background: var(--gui-danger); filter: brightness(0.88); }
 
 .gui-btn-menu {
   width: 100%;
@@ -608,6 +796,30 @@ body.gui-modal-open { overflow: hidden; }
 .gui-day-badge-weather { background: var(--gui-warn-soft); color: #8a6d00; }
 
 .gui-day-head .gui-actions { margin: 0 0 0 auto; }
+
+/* The day head doubles as the accordion's toggle button: the whole row is
+   clickable/keyboard-focusable, collapsed by default so a week of seven
+   days doesn't dump seven full schedules on the page at once. The
+   checkbox and Edit/Plan button inside it stopPropagation() on click so
+   using them doesn't also expand/collapse the card. */
+
+.gui-accordion-head {
+  cursor: pointer;
+  outline-offset: 2px;
+}
+
+.gui-accordion-caret {
+  display: inline-block;
+  width: 1em;
+  color: var(--gui-muted);
+  font-size: 12px;
+}
+
+.gui-day-helper-preview {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--gui-muted);
+}
 
 .gui-fieldtoggle {
   display: inline-flex;
@@ -789,9 +1001,13 @@ body.gui-modal-open { overflow: hidden; }
 .gui-map-cog:hover { background: var(--gui-bg); }
 
 .gui-map-legend {
+  /* Bottom-RIGHT, not bottom-left: Leaflet's scale bar already owns
+     bottom-left (addScaleBar in make_field_map.R), and the legend
+     shouldn't fight it for the same corner. */
+
   position: absolute;
   bottom: 22px;
-  left: 12px;
+  right: 12px;
   z-index: 1000;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--gui-line);
@@ -799,6 +1015,24 @@ body.gui-modal-open { overflow: hidden; }
   padding: 8px 12px;
   font-size: 12px;
   max-width: 220px;
+}
+
+[data-theme="dark"] .gui-map-legend { background: rgba(30, 35, 43, 0.92); }
+
+.gui-map-legend-head {
+  display: flex;
+  justify-content: flex-end;
+  margin: -2px -4px 2px 0;
+}
+
+.gui-map-legend-toggle {
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
 }
 
 .gui-map-legend .row {
@@ -821,6 +1055,18 @@ body.gui-modal-open { overflow: hidden; }
   height: 16px;
   object-fit: contain;
 }
+
+.gui-map-legend .legend-faded { background: #9aa3af; opacity: 0.5; }
+
+.gui-map-legend .legend-line {
+  width: 18px;
+  height: 0;
+  display: inline-block;
+  border-bottom: 3px dashed #ffff00;
+}
+
+.gui-map-legend .legend-line-path { border-bottom-style: dashed; border-bottom-color: #ffff00; }
+.gui-map-legend .legend-line-track { border-bottom-style: solid; border-bottom-color: #ff7f00; }
 
 .gui-map-patchlabel span {
   color: #fff;
@@ -898,7 +1144,16 @@ body.gui-modal-open { overflow: hidden; }
   padding-left: 20px;
 }
 
-.gui-point-facts li { margin: 3px 0; }
+/* A long note (thousands of characters, pasted rather than typed) used to
+   run straight off the right edge of the modal instead of wrapping --
+   there's no natural break point inside one giant unbroken word/paste,
+   so the browser needs telling it's allowed to break one. */
+
+.gui-point-facts li {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 /* theme switch */
 
@@ -921,9 +1176,21 @@ body.gui-modal-open { overflow: hidden; }
   height: 20px;
   border-radius: 999px;
   background: var(--gui-line);
+  border: 1px solid var(--gui-muted);
   position: relative;
   transition: background 120ms ease;
 }
+
+/* In light mode the inactive track (--gui-line, a pale gray) sat on a
+   near-white header with almost no contrast -- the control that lets
+   someone escape a theme they don't like was the hardest thing on the
+   page to see. A visible border plus a slightly darker fill make it read
+   as a switch rather than a decorative gray rectangle; dark mode already
+   had enough contrast and is untouched by this (its --gui-muted is
+   lighter than its --gui-line, so the border still reads correctly
+   there too). */
+
+:root:not([data-theme="dark"]) .gui-switch-track { background: #c4cbd6; }
 
 .gui-switch-thumb {
   position: absolute;

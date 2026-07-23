@@ -51,7 +51,7 @@
     { key: "install", label: "Install", format: yesNo },
     { key: "replace_sd", label: "SD", format: yesNo },
     { key: "replace_batteries", label: "Batteries", format: yesNo },
-    { key: "notes", label: "Last notes" }
+    { key: "notes", label: "Last notes", wrap: true }
   ];
 
   function cameraFields(lk, isNew) {
@@ -132,7 +132,7 @@
     { key: "install", label: "Install", format: yesNo },
     { key: "replace_sd", label: "SD", format: yesNo },
     { key: "replace_batteries", label: "Batteries", format: yesNo },
-    { key: "notes", label: "Notes" }
+    { key: "notes", label: "Notes", wrap: true }
   ];
 
   function logFields() {
@@ -304,26 +304,8 @@
     refresh();
   }
 
-  // Lookup lists arrive as arrays of objects; tolerate a plain string array.
-
-  function optionsFrom(list, valueKey, labelKey) {
-    return (list || []).map(function (item) {
-      if (typeof item === "string") return { value: item, label: item };
-      return { value: item[valueKey], label: item[labelKey] || item[valueKey] };
-    });
-  }
-
-  function field(labelText, input, id) {
-    var row = GuiUI.el("div", "gui-field");
-    var lab = GuiUI.el("label", "gui-label", labelText);
-
-    lab.setAttribute("for", id);
-    input.id = id;
-    input.className = "gui-input";
-    row.appendChild(lab);
-    row.appendChild(input);
-    return row;
-  }
+  var optionsFrom = GuiUI.optionsFrom;
+  var field = GuiUI.filterField;
 
   function buildFilters(host, lk) {
     var bar = GuiUI.el("div", "gui-form");

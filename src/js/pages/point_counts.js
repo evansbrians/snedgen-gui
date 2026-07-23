@@ -462,16 +462,19 @@
     f.focus();
   }
 
-  function opts(list, valueKey, labelKey) {
-    return [{ value: "", label: "" }].concat(
-      (list || []).map(function (item) {
-        if (typeof item === "string") return { value: item, label: item };
+  // withBlank's blank option reads "—" for a nullable coded field; this
+  // page's blank option is deliberately "" (no dash) to match the sheet's
+  // own blank-cell convention, so it stays its own thin wrapper over the
+  // shared optionsFrom rather than being fully identical to nests.js's
+  // withBlank -- the one place this drifted before (per the Developer's
+  // review) was point_counts.js prepending its blank unconditionally
+  // while nests.js's withBlank is opt-in per field; this keeps that same
+  // shape rather than papering over it, since both pages need it every
+  // time here.
 
-        return {
-          value: item[valueKey], label: item[labelKey] || item[valueKey]
-        };
-      })
-    );
+  function opts(list, valueKey, labelKey) {
+    return [{ value: "", label: "" }]
+      .concat(GuiUI.optionsFrom(list, valueKey, labelKey));
   }
 
   // ---- mount ---------------------------------------------------------------
@@ -492,6 +495,24 @@
 
       refs.list = GuiUI.el("div", "gui-scroll");
       host.appendChild(refs.list);
+
+      // "New point count" is wired up front, not inside the lookups
+      // .then() below -- previously, if /lookups rejected, this handler
+      // never ran at all: the button stayed on-screen but permanently
+      // dead with zero feedback (Developer's bug #2). Now a click before
+      // lookups have loaded tells you why, instead of doing nothing.
+
+      add.addEventListener("click", function () {
+        if (!state.lk) {
+          GuiUI.status(
+            "Point counts aren't ready yet — lookups failed to load. " +
+              "Reload the page, or check the API under ⚙ (top right).",
+            "err"
+          );
+          return;
+        }
+        openCount(null);
+      });
 
       GuiApi.lookups().then(function (lk) {
         state.lk = lk;
@@ -516,8 +537,13 @@
           document.body.appendChild(GuiUI.datalist(SPECIES_LIST, engine));
         }
 
-        add.addEventListener("click", function () { openCount(null); });
         return loadCounts();
+      }).catch(function (e) {
+        // Rule 2 of PAGE_CONTRACT.md: surface errors, never swallow --
+        // this .catch was the one missing from the whole codebase.
+
+        GuiUI.status("Could not load lookups: " + e.message, "err");
+        if (window.console) console.error(e);
       });
     }
   });

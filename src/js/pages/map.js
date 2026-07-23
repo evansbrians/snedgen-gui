@@ -705,6 +705,86 @@
     m.body.appendChild(bar);
   }
 
+  // ---- legend ---------------------------------------------------------------
+  //
+  // The map mixes a plain Leaflet pin, numbered square/camera badges, and
+  // illustrated nest icons with no key explaining any of it -- every
+  // reviewer who opened Map options looking for one came up empty. Built
+  // from real assets (window.fieldIcons + the vendored default Leaflet
+  // pin), grouped at the CATEGORY level that matches the layers control
+  // (Nests / Coverboards / Trail cameras / Point counts / Landmarks)
+  // rather than claiming to know the exact meaning of every nest sub-icon
+  // (building/eggs/young/failed) -- that finer detail is v_map_point's
+  // call on the server, not this page's, and is available in full on the
+  // marker's own popup.
+
+  function legendIconImg(iconKey) {
+    var ic = (window.fieldIcons || {})[iconKey];
+    var img = GuiUI.el("img", "legend-icon");
+
+    if (ic) img.src = ic.iconUrl;
+    return img;
+  }
+
+  function legendRow(host, iconEl, label) {
+    var row = GuiUI.el("div", "row");
+
+    row.appendChild(iconEl);
+    row.appendChild(GuiUI.el("span", null, label));
+    host.appendChild(row);
+  }
+
+  function buildLegend(shell) {
+    var box = GuiUI.el("div", "gui-map-legend");
+    var head = GuiUI.el("div", "gui-map-legend-head");
+    var body = GuiUI.el("div");
+    var toggleBtn = GuiUI.el("button", "gui-map-legend-toggle", "Legend ▾");
+
+    head.appendChild(toggleBtn);
+    box.appendChild(head);
+    box.appendChild(body);
+
+    legendRow(body, legendIconImg("nest_active"),
+      "Nest — icon shows stage/fate (building, active, artificial, " +
+      "concluded); click a marker for the exact record");
+    legendRow(body, legendIconImg("cb_1"), "Coverboard (numbered)");
+    legendRow(body, legendIconImg("cam_0"), "Trail camera (numbered)");
+    legendRow(body, legendIconImg("pc"), "Point count");
+
+    var pin = GuiUI.el("img", "legend-icon");
+
+    pin.src = "vendor/leaflet/images/marker-icon.png";
+    legendRow(body, pin, "Landmark / other waypoint");
+
+    var faded = GuiUI.el("span", "swatch legend-faded");
+
+    legendRow(body, faded,
+      "Faded = concluded, or not part of today's schedule");
+
+    var patchSwatch = GuiUI.el("span", "row");
+
+    patchSwatch.appendChild(GuiUI.el("span", "legend-line legend-line-path"));
+    patchSwatch.appendChild(GuiUI.el("span", null, "Garmin path"));
+    body.appendChild(patchSwatch);
+
+    var trackSwatch = GuiUI.el("span", "row");
+
+    trackSwatch.appendChild(
+      GuiUI.el("span", "legend-line legend-line-track"));
+    trackSwatch.appendChild(GuiUI.el("span", null, "Search track"));
+    body.appendChild(trackSwatch);
+
+    var collapsed = false;
+
+    toggleBtn.addEventListener("click", function () {
+      collapsed = !collapsed;
+      body.style.display = collapsed ? "none" : "";
+      toggleBtn.textContent = collapsed ? "Legend ▸" : "Legend ▾";
+    });
+
+    shell.appendChild(box);
+  }
+
   function setGroup(name, on) {
     var g = state.overlays[name];
 
@@ -800,6 +880,7 @@
 
       mapDiv.id = "guiMap";
       shell.appendChild(mapDiv);
+      buildLegend(shell);
       host.appendChild(shell);
 
       // attributionControl off, zoom on -- matching make_field_map.R.

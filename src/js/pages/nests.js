@@ -29,24 +29,10 @@
   // ---- data ----------------------------------------------------------------
 
   // Reverse alphabetical by nest id (newest N numbers first), with the NQ
-  // group pulled ahead of NSP and NLB per Brian's spec.
+  // group pulled ahead of NSP and NLB per Brian's spec -- shared with
+  // gps_points.js as GuiUI.nestIdCompare.
 
-  function prefixRank(id) {
-    var s = String(id || "");
-
-    if (/^NQ/.test(s)) return 0;
-    if (/^NSP/.test(s)) return 1;
-    if (/^NLB/.test(s)) return 2;
-    return 3;
-  }
-
-  function nestOrder(a, b) {
-    var ra = prefixRank(a);
-    var rb = prefixRank(b);
-
-    if (ra !== rb) return ra - rb;
-    return String(b).localeCompare(String(a));
-  }
+  var nestOrder = GuiUI.nestIdCompare;
 
   function loadNests() {
     GuiUI.status("Loading nests…", "busy");
@@ -97,7 +83,7 @@
     { key: "substrates", label: "Substrates" },
     { key: "last_check", label: "Last check" },
     { key: "nest_fate", label: "Fate" },
-    { key: "location_description", label: "Location" }
+    { key: "location_description", label: "Location", wrap: true }
   ];
 
   // Exactly the scalar fields PATCH /nests/<id> lists as editable, minus
@@ -152,7 +138,22 @@
         label: "Camera deployed",
         type: "date"
       },
-      { key: "height_m", label: "Height (m)", type: "number" },
+      {
+        key: "height_m",
+        label: "Height (m)",
+        type: "number",
+
+        // Not a hard cap -- a real nest can sit outside this -- but
+        // Boss and Lab Manager both typed "99" (meant as a fat-finger,
+        // or a decimal-point slip) and had it save with no pushback at
+        // all. 0-4m covers this study's shrub/understory nests; editDiscovery()
+        // below asks "are you sure?" before saving anything outside it
+        // instead of silently accepting it.
+
+        min: 0,
+        max: 4,
+        unit: "m"
+      },
       {
         key: "location_description",
         label: "Location description",
@@ -445,12 +446,30 @@
         "Delete record");
 
       ok.addEventListener("click", function () {
+        var values = f.read();
+
+        // A range warning (height_m outside 0-4m) asks "are you sure?"
+        // instead of silently accepting it -- the exact "99" repro both
+        // the Boss and the Lab Manager hit.
+
+        var warn = GuiUI.rangeWarning(
+          { min: 0, max: 4, unit: "m" }, values.height_m
+        );
+
+        (warn ? GuiUI.confirm(warn) : Promise.resolve(true))
+          .then(function (proceed) {
+            if (!proceed) return;
+            saveDiscovery(values);
+          });
+      });
+
+      function saveDiscovery(values) {
         ok.disabled = true;
         GuiUI.status("Saving…", "busy");
 
         GuiApi.patch(
           "/nests/" + encodeURIComponent(row.nest_id),
-          nestBody(f.read())
+          nestBody(values)
         ).then(function () {
           GuiUI.status("Nest saved.", "ok");
 
@@ -467,7 +486,7 @@
           if (window.console) console.error(e);
           ok.disabled = false;
         });
-      });
+      }
 
       no.addEventListener("click", renderDiscovery);
 
@@ -516,7 +535,7 @@
       { key: "bhco_dead_young", label: "BHCO dead" },
       { key: "nest_status", label: "Status" },
       { key: "young_status", label: "Young" },
-      { key: "notes", label: "Notes" }
+      { key: "notes", label: "Notes", wrap: true }
     ];
 
     function intervalFields(lk) {
@@ -684,33 +703,9 @@
 
   // ---- filters -------------------------------------------------------------
 
-  // A nullable coded field needs an empty option: the form reads "" back as
-  // null, which is how the API clears a column.
-
-  function withBlank(options) {
-    return [{ value: "", label: "—" }].concat(options);
-  }
-
-  // Lookup lists arrive as arrays of objects; tolerate a plain string array.
-
-  function optionsFrom(list, valueKey, labelKey) {
-    return (list || []).map(function (item) {
-      if (typeof item === "string") return { value: item, label: item };
-      return { value: item[valueKey], label: item[labelKey] || item[valueKey] };
-    });
-  }
-
-  function field(labelText, input, id) {
-    var row = GuiUI.el("div", "gui-field");
-    var lab = GuiUI.el("label", "gui-label", labelText);
-
-    lab.setAttribute("for", id);
-    input.id = id;
-    input.className = "gui-input";
-    row.appendChild(lab);
-    row.appendChild(input);
-    return row;
-  }
+  var withBlank = GuiUI.withBlank;
+  var optionsFrom = GuiUI.optionsFrom;
+  var field = GuiUI.filterField;
 
   function buildFilters(host, lk) {
     var bar = GuiUI.el("div", "gui-form");

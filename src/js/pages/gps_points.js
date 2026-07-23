@@ -11,24 +11,10 @@
   var state = { points: [], nestPoints: {}, cls: "", patch: "", q: "" };
   var refs = {};
 
-  // Reverse alphabetical, with the NQ group ahead of NSP and NLB.
+  // Reverse alphabetical, with the NQ group ahead of NSP and NLB -- shared
+  // with nests.js as GuiUI.nestIdCompare.
 
-  function prefixRank(id) {
-    var s = String(id || "");
-
-    if (/^NQ/.test(s)) return 0;
-    if (/^NSP/.test(s)) return 1;
-    if (/^NLB/.test(s)) return 2;
-    return 3;
-  }
-
-  function nestOrder(a, b) {
-    var ra = prefixRank(a);
-    var rb = prefixRank(b);
-
-    if (ra !== rb) return ra - rb;
-    return String(b || "").localeCompare(String(a || ""));
-  }
+  var nestOrder = GuiUI.nestIdCompare;
 
   // ---- patch derivation ----------------------------------------------------
 
@@ -211,7 +197,7 @@
     { key: "longitude", label: "Longitude", format: num(6) },
     { key: "horizontal_accuracy", label: "Accuracy (m)", format: num(1) },
     { key: "datetime", label: "Recorded" },
-    { key: "note", label: "Note" }
+    { key: "note", label: "Note", wrap: true }
   ];
 
   function pointFields(lk) {
@@ -443,24 +429,8 @@
 
   // ---- filters -------------------------------------------------------------
 
-  function optionsFrom(list, valueKey, labelKey) {
-    return (list || []).map(function (item) {
-      if (typeof item === "string") return { value: item, label: item };
-      return { value: item[valueKey], label: item[labelKey] || item[valueKey] };
-    });
-  }
-
-  function field(labelText, input, id) {
-    var row = GuiUI.el("div", "gui-field");
-    var lab = GuiUI.el("label", "gui-label", labelText);
-
-    lab.setAttribute("for", id);
-    input.id = id;
-    input.className = "gui-input";
-    row.appendChild(lab);
-    row.appendChild(input);
-    return row;
-  }
+  var optionsFrom = GuiUI.optionsFrom;
+  var field = GuiUI.filterField;
 
   function buildFilters(host, lk) {
     var bar = GuiUI.el("div", "gui-form");

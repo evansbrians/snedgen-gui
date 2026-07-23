@@ -1,7 +1,7 @@
 # Data-entry GUI — page contract
 
 Standalone webpage (no Shiny, no Quarto). Served by Caddy from the VM beside the
-API, so every request is **same-origin**: fetch `"/coverboard_checks"`, never an
+API, so every request is **same-origin**: fetch `"/nests"`, never an
 absolute host. Tara opens it on a laptop.
 
 Read this before writing a page. Every page follows it so the five pages stay one
@@ -23,8 +23,8 @@ app rather than five.
 
 ```js
 GuiPages.register({
-  id: "coverboards",          // URL hash + nav id
-  label: "Coverboards",       // nav button text
+  id: "point_counts",         // URL hash + nav id
+  label: "Point counts",      // nav button text
   mount: function (el) { }    // called once, when first shown; el is an empty div
 });
 ```
@@ -51,9 +51,7 @@ built to match. Parent/child families use nested routes.
 
 | Page | Endpoints |
 |---|---|
-| Coverboards | `GET/POST /coverboard_checks`, `GET/PATCH/DELETE /coverboard_checks/<id>`, `GET/POST /coverboard_checks/<id>/obs`, `PATCH/DELETE /coverboard_obs/<id>` |
 | Point counts | `GET/POST /point_counts`, `GET/PATCH/DELETE /point_counts/<id>`, `GET/POST /point_counts/<id>/intervals`, `PATCH/DELETE /count_intervals/<id>` |
-| Visits | `GET/POST /visits`, `GET/PATCH/DELETE /visits/<id>` |
 | Cameras | `GET/POST /predator_cameras`, `PATCH/DELETE /predator_cameras/<id>`, `GET/POST /predator_cameras/<id>/maintenance`, `PATCH/DELETE /camera_maintenance/<id>` |
 | Schedule | `GET/POST /schedule_days`, `PATCH/DELETE /schedule_days/<id>` |
 | Nests | `GET /nests`, `POST /nests`, `PATCH /nests/<id>` (these already exist) |
@@ -62,13 +60,13 @@ List routes accept filters as query params (e.g. `?patch_id=coyote&from=2026-07-
 
 ## Schema notes that bite
 
-- Surrogate ids (`coverboard_check_id`, `point_count_id`, `visit_id`, …) are
-  currently reassigned by `nightly_load.R` on every run. They only become stable
-  once that table leaves the loader. Do not cache an id across a reload.
+- Surrogate ids (`point_count_id`, …) are currently reassigned by
+  `nightly_load.R` on every run. They only become stable once that table
+  leaves the loader. Do not cache an id across a reload.
 - `count_interval.interval` is CHECKed 1..3; `distance` and `detection` have
   CHECK constraints too — read them off `/lookups`, do not invent options.
-- `coverboard_obs` and `count_interval` are `ON DELETE CASCADE` from their
-  parent. Deleting a check deletes its observations.
+- `count_interval` is `ON DELETE CASCADE` from `point_counts`. Deleting a
+  count deletes its intervals.
 
 ## v2 conventions (July 2026 rework)
 

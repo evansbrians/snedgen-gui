@@ -49,6 +49,20 @@
   }
   ApiError.prototype = Object.create(Error.prototype);
 
+  // app.js registers ONE handler here at boot. Every request that comes
+  // back 401 calls it, from wherever in the app it happened -- previously
+  // only boot()'s own initial /lookups call actually inspected
+  // e.status === 401; the ~20 page-level .catch(e) blocks each just
+  // printed "... failed: <message>" and stopped, with no path back to
+  // the token gate short of noticing the ⚙ button. Centralizing the
+  // check here means a page never has to know about it at all.
+
+  var unauthorizedHandler = null;
+
+  function onUnauthorized(fn) {
+    unauthorizedHandler = fn;
+  }
+
   function request(method, path, body) {
     var opts = {
       method: method,
@@ -71,6 +85,9 @@
         }
 
         if (!resp.ok) {
+          if (resp.status === 401 && unauthorizedHandler) {
+            unauthorizedHandler();
+          }
           throw new ApiError(
             method + " " + path + " failed [" + resp.status + "]: " +
               String(text).slice(0, 200),
@@ -149,6 +166,7 @@
     token: token,
     setToken: setToken,
     hasToken: hasToken,
+    onUnauthorized: onUnauthorized,
     ApiError: ApiError
   };
 })();

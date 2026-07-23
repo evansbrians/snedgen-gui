@@ -24,6 +24,96 @@
     return (v === null || v === undefined || v === "") ? "—" : String(v);
   }
 
+  // ---- shared field/list helpers --------------------------------------------
+  //
+  // optionsFrom/withBlank/filterField/nestIdCompare used to be copy-pasted
+  // into every page module (nests.js, gps_points.js, cameras.js, schedule.js,
+  // summary.js, coverboards.js, visits.js, point_counts.js's near-identical
+  // opts()) -- exactly the drift PAGE_CONTRACT.md warns pages away from.
+  // Promoted here so there is one copy to fix.
+
+  // Lookup lists arrive as arrays of objects; tolerate a plain string array.
+
+  function optionsFrom(list, valueKey, labelKey) {
+    return (list || []).map(function (item) {
+      if (typeof item === "string") return { value: item, label: item };
+      return {
+        value: item[valueKey],
+        label: item[labelKey] || item[valueKey]
+      };
+    });
+  }
+
+  // A nullable coded field needs an empty option: the form reads "" back as
+  // null, which is how the API clears a column.
+
+  function withBlank(options, blankLabel) {
+    return [{ value: "", label: blankLabel || "—" }].concat(options || []);
+  }
+
+  // A labeled filter-bar control (label + input), used outside GuiUI.form
+  // for the small filter rows above a page's table.
+
+  function filterField(labelText, input, id) {
+    var row = el("div", "gui-field");
+    var lab = el("label", "gui-label", labelText);
+
+    lab.setAttribute("for", id);
+    input.id = id;
+    input.className = "gui-input";
+    row.appendChild(lab);
+    row.appendChild(input);
+    return row;
+  }
+
+  // Reverse alphabetical by id (newest numbers first), with the NQ group
+  // pulled ahead of NSP and NLB -- the ordering nests.js and gps_points.js
+  // both want for nest/point ids.
+
+  function prefixRank(id) {
+    var s = String(id || "");
+
+    if (/^NQ/.test(s)) return 0;
+    if (/^NSP/.test(s)) return 1;
+    if (/^NLB/.test(s)) return 2;
+    return 3;
+  }
+
+  function nestIdCompare(a, b) {
+    var ra = prefixRank(a);
+    var rb = prefixRank(b);
+
+    if (ra !== rb) return ra - rb;
+    return String(b || "").localeCompare(String(a || ""));
+  }
+
+  // A "does this look right" range check for a number field with fd.min /
+  // fd.max -- NOT a hard block (a real value can legitimately fall
+  // outside), just enough for a page to ask "are you sure?" before saving
+  // an implausible entry. Returns a warning string, or null if v is fine
+  // or fd has no range.
+
+  function rangeWarning(fd, v) {
+    if (fd.min === undefined && fd.max === undefined) return null;
+    if (v === null || v === undefined || v === "") return null;
+
+    var n = Number(v);
+
+    if (isNaN(n)) return null;
+
+    var unit = fd.unit ? " " + fd.unit : "";
+
+    if (fd.min !== undefined && n < fd.min) {
+      return n + " is below the typical " + fd.min + "-" + fd.max + unit +
+        " range — save anyway?";
+    }
+    if (fd.max !== undefined && n > fd.max) {
+      return n + " is above the typical " + fd.min + "-" + fd.max + unit +
+        " range — save anyway?";
+    }
+    return null;
+  }
+
   // ---- modal ---------------------------------------------------------------
 
   // Modals STACK: a row menu or confirm opened from inside a popup rides on
@@ -98,6 +188,18 @@
     if (modalStack.length) modalStack[modalStack.length - 1].close();
   }
 
+  // Force every open modal shut, top of stack first. Used when the route
+  // changes (a hash nav) so a popup never survives onto a page it no
+  // longer belongs over -- see PAGE_CONTRACT.md's navigation note. This
+  // bypasses beforeClose guards deliberately: a route change is the one
+  // case where "the app looks frozen" outranks "warn about unsaved work."
+
+  function closeAllModals() {
+    while (modalStack.length) {
+      modalStack[modalStack.length - 1].close(true);
+    }
+  }
+
   // ---- row menu ------------------------------------------------------------
 
   // The popup a clicked row opens: a title line and a short stack of actions.
@@ -130,7 +232,7 @@
 
   // ---- tables --------------------------------------------------------------
 
-  // cols: [{ key, label, format(value, row) }]
+  // cols: [{ key, label, format(value, row), sortable, sortValue(row) }]
   // opts: {
   //   empty,
   //   onRowClick(row, tr),        -- row becomes clickable
@@ -140,8 +242,28 @@
   //     onDelete(row),            -- optional Delete button in the edit bar
   //     ask                       -- true: row click opens rowMenu first
   //   },
-  //   rowTitle(row)               -- title for the inlineEdit rowMenu
+  //   rowTitle(row),              -- title for the inlineEdit rowMenu
+  //   sortable: false             -- opt a whole table out of header sort
   // }
+
+  // Generic, comparable-value sort: numeric when both sides parse as a
+  // number, locale string compare otherwise, blanks always sort last
+  // regardless of direction (a blank isn't meaningfully "low" or "high").
+
+  function compareValues(a, b) {
+    var aBlank = a === null || a === undefined || a === "";
+    var bBlank = b === null || b === undefined || b === "";
+
+    if (aBlank && bBlank) return 0;
+    if (aBlank) return 1;
+    if (bBlank) return -1;
+
+    var an = Number(a);
+    var bn = Number(b);
+
+    if (!isNaN(an) && !isNaN(bn)) return an - bn;
+    return String(a).localeCompare(String(b));
+  }
 
   function table(cols, rows, opts) {
     opts = opts || {};
@@ -157,20 +279,74 @@
     var thead = el("thead");
     var hrow = el("tr");
 
-    cols.forEach(function (c) {
-      hrow.appendChild(el("th", null, c.label));
-    });
-    if (opts.rowDelete) hrow.appendChild(el("th", null, ""));
+    // No sortability cues used to exist anywhere in the app -- a table
+    // rendered its rows in whatever order the caller passed and stayed
+    // that way. Any column that isn't explicitly opted out (c.sortable
+    // === false) is click-to-sort here, ascending first click, descending
+    // second, with a ▲/▼ indicator on whichever column is currently
+    // driving the order.
+
+    var sort = { col: null, dir: 1 };
+    var tbody = null;
+    var ths = [];
+
+    function sortedRows() {
+      if (sort.col === null) return rows;
+
+      var c = cols[sort.col];
+      var val = c.sortValue || function (r) { return r[c.key]; };
+
+      return rows.slice().sort(function (a, b) {
+        return sort.dir * compareValues(val(a), val(b));
+      });
+    }
+
+    function renderHeaders() {
+      hrow.innerHTML = "";
+      ths = [];
+
+      cols.forEach(function (c, i) {
+        var th = el("th");
+        var sortable = opts.sortable !== false && c.sortable !== false;
+
+        if (c.wrap) th.classList.add("gui-td-wrap");
+        th.appendChild(el("span", null, c.label));
+
+        if (sortable) {
+          th.classList.add("gui-th-sortable");
+          if (sort.col === i) {
+            th.appendChild(el("span", "gui-sort-arrow",
+              sort.dir === 1 ? " ▲" : " ▼"));
+          }
+          th.addEventListener("click", function () {
+            sort.dir = (sort.col === i) ? -sort.dir : 1;
+            sort.col = i;
+            renderHeaders();
+            renderBody();
+          });
+        }
+        ths.push(th);
+        hrow.appendChild(th);
+      });
+      if (opts.rowDelete) hrow.appendChild(el("th", null, ""));
+    }
+
+    function renderBody() {
+      var fresh = el("tbody");
+
+      sortedRows().forEach(function (row) {
+        fresh.appendChild(dataRow(cols, row, opts));
+      });
+
+      if (tbody) t.replaceChild(fresh, tbody);
+      else t.appendChild(fresh);
+      tbody = fresh;
+    }
+
+    renderHeaders();
     thead.appendChild(hrow);
     t.appendChild(thead);
-
-    var tbody = el("tbody");
-
-    rows.forEach(function (row) {
-      tbody.appendChild(dataRow(cols, row, opts));
-    });
-
-    t.appendChild(tbody);
+    renderBody();
     wrap.appendChild(t);
     return wrap;
   }
@@ -182,8 +358,9 @@
     cols.forEach(function (c) {
       var raw = row[c.key];
       var val = c.format ? c.format(raw, row) : dash(raw);
+      var td = el("td", c.wrap ? "gui-td-wrap" : null, val);
 
-      tr.appendChild(el("td", null, val));
+      tr.appendChild(td);
     });
 
     // opts.rowDelete(row): an X at the row's end deletes it directly --
@@ -192,7 +369,8 @@
 
     if (opts.rowDelete) {
       var dtd = el("td", "gui-row-actions");
-      var db = el("button", "gui-btn gui-btn-sm gui-btn-danger", "×");
+      var db = el("button", "gui-btn gui-btn-sm gui-btn-danger gui-btn-x",
+        "×");
 
       db.title = "Delete row";
       db.tabIndex = -1;
@@ -422,6 +600,32 @@
         opt.value = o.value;
         input.appendChild(opt);
       });
+
+      // Data-loss guard: if the stored value isn't one of the current
+      // options (a lookup table has drifted from an older record), the
+      // browser silently falls back to selecting the FIRST option -- and
+      // an unmodified save then writes that blank/default value over the
+      // real one. Instead, add the stale value as its own flagged option
+      // so it round-trips unless someone deliberately picks something
+      // else, and mark the field so it's visibly not a normal choice.
+
+      if (value !== undefined && value !== null && value !== "") {
+        var hasOpt = (fd.options || []).some(function (o) {
+          return String(o.value) === String(value);
+        });
+
+        if (!hasOpt) {
+          var stale = el("option", null, String(value) +
+            " (not in current list — verify)");
+
+          stale.value = String(value);
+          input.insertBefore(stale, input.firstChild);
+          input.classList.add("gui-input-stale");
+          input.title = "Stored value \"" + value + "\" is not in the " +
+            "current lookup list. Left as-is; change it deliberately if " +
+            "it's wrong.";
+        }
+      }
     } else if (fd.type === "textarea") {
       input = el("textarea", "gui-input");
     } else {
@@ -442,6 +646,25 @@
         wireTime(input);
       } else {
         input.type = t;
+      }
+
+      // A "reasonable range" hint (e.g. nest height 0-30m), not a hard
+      // HTML5 min/max block -- a real measurement can legitimately sit
+      // outside it. Out-of-range flags the cell like an invalid select
+      // value; rangeWarning() below is what a page uses at save time to
+      // ask "are you sure?" instead of silently accepting a fat-fingered
+      // "99".
+
+      if (t === "number" && (fd.min !== undefined || fd.max !== undefined)) {
+        input.addEventListener("change", function () {
+          var bad = input.value !== "" &&
+            rangeWarning(fd, input.value) !== null;
+
+          input.classList.toggle("gui-input-warn", bad);
+          input.title = bad
+            ? rangeWarning(fd, input.value)
+            : "";
+        });
       }
     }
 
@@ -826,7 +1049,8 @@
         var td = el("td", "gui-row-actions");
 
         if (i < data.length - 1) {
-          var d = el("button", "gui-btn gui-btn-sm gui-btn-danger", "×");
+          var d = el("button", "gui-btn gui-btn-sm gui-btn-danger gui-btn-x",
+            "×");
 
           d.title = "Remove row";
 
@@ -1022,9 +1246,47 @@
   function status(msg, kind) {
     var bar = document.getElementById("guiStatus");
 
-    if (!bar) return;
-    bar.textContent = msg || "";
-    bar.className = "gui-status" + (kind ? " gui-status-" + kind : "");
+    if (bar) {
+      bar.textContent = msg || "";
+      bar.className = "gui-status" + (kind ? " gui-status-" + kind : "");
+    }
+
+    // The status bar sits in the page header, BEHIND any open modal
+    // (backdrop z-index 5000 vs header z-index 50) -- so a save made from
+    // inside a popup produced a status line nobody could see. A toast rides
+    // above the modal stack and self-dismisses, so "Saved." / an error is
+    // visible whether or not a modal is open. "busy" is deliberately left
+    // off the toast -- it is a transient state, not something worth a
+    // popup, and would just flash before the ok/err toast replaces it.
+
+    if (msg && (kind === "ok" || kind === "err")) toast(msg, kind);
+  }
+
+  var toastHost = null;
+
+  function toast(msg, kind) {
+    if (!toastHost) {
+      toastHost = el("div", "gui-toast-host");
+      document.body.appendChild(toastHost);
+    }
+
+    var t = el("div", "gui-toast" + (kind ? " gui-toast-" + kind : ""), msg);
+
+    toastHost.appendChild(t);
+
+    // Two rAFs so the "in" transition always runs (some browsers coalesce
+    // a style change that happens in the same frame as the append).
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { t.classList.add("is-in"); });
+    });
+
+    setTimeout(function () {
+      t.classList.remove("is-in");
+      setTimeout(function () {
+        if (t.parentNode) t.parentNode.removeChild(t);
+      }, 220);
+    }, 3200);
   }
 
   function confirmDialog(msg) {
@@ -1060,6 +1322,7 @@
     dash: dash,
     modal: modal,
     closeModal: closeModal,
+    closeAllModals: closeAllModals,
     rowMenu: rowMenu,
     table: table,
     form: form,
@@ -1071,6 +1334,12 @@
     photoViewer: photoViewer,
     zoomable: zoomable,
     status: status,
-    confirm: confirmDialog
+    toast: toast,
+    confirm: confirmDialog,
+    optionsFrom: optionsFrom,
+    withBlank: withBlank,
+    filterField: filterField,
+    nestIdCompare: nestIdCompare,
+    rangeWarning: rangeWarning
   };
 })();
